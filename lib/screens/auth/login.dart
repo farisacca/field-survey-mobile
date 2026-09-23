@@ -1,10 +1,12 @@
 import 'dart:convert';
 
 import 'package:field_survey/screens/auth/register.dart';
-import 'package:field_survey/screens/dashboard/dashboard.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:field_survey/routes/app_routes.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -43,6 +45,7 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> login() async {
     final email = emailController.text.trim();
+
     final password = passwordController.text.trim();
 
     // =======================================================
@@ -122,6 +125,7 @@ class _LoginPageState extends State<LoginPage> {
         data = jsonDecode(response.body);
       } catch (e) {
         data = {};
+
         print('JSON ERROR: $e');
       }
 
@@ -140,37 +144,37 @@ class _LoginPageState extends State<LoginPage> {
         // ===================================================
 
         if (data is Map) {
-          // -----------------------------------------------
+          // -------------------------------------------------
           // FORMAT:
           // {
           //   "token": "xxxxx"
           // }
-          // -----------------------------------------------
+          // -------------------------------------------------
 
           if (data['token'] != null) {
             token = data['token'].toString();
           }
 
-          // -----------------------------------------------
+          // -------------------------------------------------
           // FORMAT:
           // {
           //   "access_token": "xxxxx"
           // }
-          // -----------------------------------------------
+          // -------------------------------------------------
 
           if ((token == null || token.isEmpty) &&
               data['access_token'] != null) {
             token = data['access_token'].toString();
           }
 
-          // -----------------------------------------------
+          // -------------------------------------------------
           // FORMAT:
           // {
           //   "data": {
           //      "token": "xxxxx"
           //   }
           // }
-          // -----------------------------------------------
+          // -------------------------------------------------
 
           if ((token == null || token.isEmpty) && data['data'] is Map) {
             final dataMap = Map<String, dynamic>.from(data['data']);
@@ -201,6 +205,10 @@ class _LoginPageState extends State<LoginPage> {
         if (token != null && token.isNotEmpty) {
           final prefs = await SharedPreferences.getInstance();
 
+          // Hapus token lama terlebih dahulu
+          await prefs.remove('token');
+
+          // Simpan token baru
           await prefs.setString('token', token);
 
           print('======================================');
@@ -214,7 +222,7 @@ class _LoginPageState extends State<LoginPage> {
           print('TOKEN DARI STORAGE: $savedToken');
         } else {
           print('======================================');
-          print('❌ TOKEN TIDAK DITEMUKAN');
+          print('TOKEN TIDAK DITEMUKAN');
           print('======================================');
 
           if (!mounted) return;
@@ -232,25 +240,9 @@ class _LoginPageState extends State<LoginPage> {
         // ===================================================
 
         if (data is Map) {
-          // -----------------------------------------------
-          // FORMAT:
-          // {
-          //   "user": {...}
-          // }
-          // -----------------------------------------------
-
           if (data['user'] is Map) {
             userData = data['user'];
-          }
-          // -----------------------------------------------
-          // FORMAT:
-          // {
-          //   "data": {
-          //      "user": {...}
-          //   }
-          // }
-          // -----------------------------------------------
-          else if (data['data'] is Map) {
+          } else if (data['data'] is Map) {
             final dataMap = Map<String, dynamic>.from(data['data']);
 
             if (dataMap['user'] is Map) {
@@ -291,11 +283,14 @@ class _LoginPageState extends State<LoginPage> {
         // ===================================================
         // KE DASHBOARD
         // ===================================================
+        //
+        // PENTING:
+        // Sekarang menggunakan GoRouter,
+        // sama seperti logout.
+        //
+        // ===================================================
 
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const DashboardPage()),
-        );
+        context.go(AppRoutes.dashboard);
 
         return;
       }

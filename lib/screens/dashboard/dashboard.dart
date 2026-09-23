@@ -1,6 +1,8 @@
-import 'package:field_survey/screens/profile/profil.dart';
 import 'package:field_survey/screens/survey/survey.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import 'package:field_survey/routes/app_routes.dart';
 
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
@@ -15,42 +17,26 @@ class DashboardPage extends StatelessWidget {
       // =====================================================
       // BODY
       // =====================================================
-
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
             children: [
-
               // =================================================
               // HEADER
               // =================================================
-
               Container(
                 width: double.infinity,
-
-                padding: const EdgeInsets.fromLTRB(
-                  20,
-                  20,
-                  20,
-                  35,
-                ),
-
-                decoration: const BoxDecoration(
-                  color: primaryColor,
-                ),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 35),
+                decoration: const BoxDecoration(color: primaryColor),
 
                 child: Column(
                   children: [
-
                     Row(
                       children: [
-
                         // FOTO PROFILE
                         const CircleAvatar(
                           radius: 28,
-
                           backgroundColor: Colors.white,
-
                           child: Icon(
                             Icons.person,
                             color: primaryColor,
@@ -63,11 +49,8 @@ class DashboardPage extends StatelessWidget {
                         // NAMA
                         const Expanded(
                           child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-
                               Text(
                                 "Welcome 👋",
                                 style: TextStyle(
@@ -91,9 +74,7 @@ class DashboardPage extends StatelessWidget {
 
                               Text(
                                 "Survey Officer",
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                ),
+                                style: TextStyle(color: Colors.white70),
                               ),
                             ],
                           ),
@@ -103,8 +84,7 @@ class DashboardPage extends StatelessWidget {
                         Container(
                           decoration: BoxDecoration(
                             color: Colors.white24,
-                            borderRadius:
-                                BorderRadius.circular(15),
+                            borderRadius: BorderRadius.circular(15),
                           ),
 
                           child: IconButton(
@@ -126,11 +106,7 @@ class DashboardPage extends StatelessWidget {
 
                       child: Text(
                         "Wednesday, 29 July 2026",
-
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
                       ),
                     ),
                   ],
@@ -142,42 +118,30 @@ class DashboardPage extends StatelessWidget {
               // =================================================
               // TODAY'S SURVEY
               // =================================================
-
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(
-                  horizontal: 20,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
 
                 child: Card(
                   elevation: 6,
-
                   shadowColor: Colors.black26,
 
-                  shape:
-                      RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(22),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(22),
                   ),
 
                   child: Padding(
-                    padding:
-                        const EdgeInsets.all(22),
+                    padding: const EdgeInsets.all(22),
 
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
 
                       children: [
-
                         const Row(
                           children: [
-
                             CircleAvatar(
                               radius: 20,
 
-                              backgroundColor:
-                                  Color(0xFFF7E7EB),
+                              backgroundColor: Color(0xFFF7E7EB),
 
                               child: Icon(
                                 Icons.assignment_outlined,
@@ -192,8 +156,7 @@ class DashboardPage extends StatelessWidget {
 
                               style: TextStyle(
                                 fontSize: 18,
-                                fontWeight:
-                                    FontWeight.bold,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ],
@@ -206,8 +169,7 @@ class DashboardPage extends StatelessWidget {
 
                           style: TextStyle(
                             fontSize: 26,
-                            fontWeight:
-                                FontWeight.bold,
+                            fontWeight: FontWeight.bold,
                             color: primaryColor,
                           ),
                         ),
@@ -215,31 +177,26 @@ class DashboardPage extends StatelessWidget {
                         const SizedBox(height: 20),
 
                         ClipRRect(
-                          borderRadius:
-                              BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(20),
 
-                          child:
-                              const LinearProgressIndicator(
+                          child: const LinearProgressIndicator(
                             value: 0.85,
                             minHeight: 10,
                             color: primaryColor,
-                            backgroundColor:
-                                Color(0xFFE9D7DD),
+                            backgroundColor: Color(0xFFE9D7DD),
                           ),
                         ),
 
                         const SizedBox(height: 10),
 
                         const Align(
-                          alignment:
-                              Alignment.centerRight,
+                          alignment: Alignment.centerRight,
 
                           child: Text(
                             "85%",
 
                             style: TextStyle(
-                              fontWeight:
-                                  FontWeight.bold,
+                              fontWeight: FontWeight.bold,
                               color: primaryColor,
                             ),
                           ),
@@ -255,16 +212,11 @@ class DashboardPage extends StatelessWidget {
               // =================================================
               // STATISTIK
               // =================================================
-
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(
-                  horizontal: 20,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
 
                 child: Row(
                   children: [
-
                     Expanded(
                       child: statCard(
                         "Survey Hari Ini",
@@ -291,12 +243,8 @@ class DashboardPage extends StatelessWidget {
               // =================================================
               // MENU UTAMA
               // =================================================
-
               const Padding(
-                padding:
-                    EdgeInsets.symmetric(
-                  horizontal: 20,
-                ),
+                padding: EdgeInsets.symmetric(horizontal: 20),
 
                 child: Align(
                   alignment: Alignment.centerLeft,
@@ -304,10 +252,7 @@ class DashboardPage extends StatelessWidget {
                   child: Text(
                     "Menu Utama",
 
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -315,16 +260,12 @@ class DashboardPage extends StatelessWidget {
               const SizedBox(height: 15),
 
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(
-                  horizontal: 20,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
 
                 child: GridView.count(
                   shrinkWrap: true,
 
-                  physics:
-                      const NeverScrollableScrollPhysics(),
+                  physics: const NeverScrollableScrollPhysics(),
 
                   crossAxisCount: 3,
 
@@ -335,8 +276,9 @@ class DashboardPage extends StatelessWidget {
                   childAspectRatio: 0.9,
 
                   children: [
-
+                    // =================================================
                     // SURVEY
+                    // =================================================
                     menuCard(
                       context,
                       Icons.assignment_outlined,
@@ -344,7 +286,9 @@ class DashboardPage extends StatelessWidget {
                       const SurveyPage(),
                     ),
 
+                    // =================================================
                     // LOKASI
+                    // =================================================
                     menuCard(
                       context,
                       Icons.location_on_outlined,
@@ -352,7 +296,9 @@ class DashboardPage extends StatelessWidget {
                       null,
                     ),
 
+                    // =================================================
                     // LAPORAN
+                    // =================================================
                     menuCard(
                       context,
                       Icons.bar_chart_outlined,
@@ -360,22 +306,21 @@ class DashboardPage extends StatelessWidget {
                       null,
                     ),
 
+                    // =================================================
                     // PROFIL
+                    // =================================================
                     menuCard(
                       context,
                       Icons.person_outline,
                       "Profil",
-                      const ProfilePage(),
-                    ),
-
-                    // RIWAYAT
-                    menuCard(
-                      context,
-                      Icons.history,
-                      "Riwayat",
                       null,
+                      route: AppRoutes.profil,
                     ),
 
+                    // =================================================
+                    // RIWAYAT
+                    // =================================================
+                    menuCard(context, Icons.history, "Riwayat", null),
                   ],
                 ),
               ),
@@ -385,12 +330,8 @@ class DashboardPage extends StatelessWidget {
               // =================================================
               // AKTIVITAS TERBARU
               // =================================================
-
               const Padding(
-                padding:
-                    EdgeInsets.symmetric(
-                  horizontal: 20,
-                ),
+                padding: EdgeInsets.symmetric(horizontal: 20),
 
                 child: Align(
                   alignment: Alignment.centerLeft,
@@ -398,10 +339,7 @@ class DashboardPage extends StatelessWidget {
                   child: Text(
                     "Aktivitas Terbaru",
 
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -431,91 +369,58 @@ class DashboardPage extends StatelessWidget {
       // =====================================================
       // BOTTOM NAVIGATION
       // =====================================================
-
-      bottomNavigationBar:
-          BottomNavigationBar(
+      bottomNavigationBar: BottomNavigationBar(
         currentIndex: 0,
 
-        selectedItemColor:
-            primaryColor,
+        selectedItemColor: primaryColor,
 
-        unselectedItemColor:
-            Colors.grey,
+        unselectedItemColor: Colors.grey,
 
-        type:
-            BottomNavigationBarType.fixed,
+        type: BottomNavigationBarType.fixed,
 
         elevation: 8,
 
         onTap: (index) {
-
           // ================= HOME =================
 
           if (index == 0) {
-            return;
+            context.go(AppRoutes.dashboard);
           }
 
           // ================= SURVEY =================
 
           if (index == 1) {
-            Navigator.push(
-              context,
-
-              MaterialPageRoute(
-                builder: (context) =>
-                    const SurveyPage(),
-              ),
-            );
+            context.go('/survey');
           }
 
           // ================= PROFIL =================
 
           if (index == 2) {
-            Navigator.push(
-              context,
-
-              MaterialPageRoute(
-                builder: (context) =>
-                    const ProfilePage(),
-              ),
-            );
+            context.go(AppRoutes.profil);
           }
         },
 
         items: const [
-
           BottomNavigationBarItem(
-            icon: Icon(
-              Icons.home_outlined,
-            ),
+            icon: Icon(Icons.home_outlined),
 
-            activeIcon: Icon(
-              Icons.home,
-            ),
+            activeIcon: Icon(Icons.home),
 
             label: "Home",
           ),
 
           BottomNavigationBarItem(
-            icon: Icon(
-              Icons.assignment_outlined,
-            ),
+            icon: Icon(Icons.assignment_outlined),
 
-            activeIcon: Icon(
-              Icons.assignment,
-            ),
+            activeIcon: Icon(Icons.assignment),
 
             label: "Survey",
           ),
 
           BottomNavigationBarItem(
-            icon: Icon(
-              Icons.person_outline,
-            ),
+            icon: Icon(Icons.person_outline),
 
-            activeIcon: Icon(
-              Icons.person,
-            ),
+            activeIcon: Icon(Icons.person),
 
             label: "Profil",
           ),
@@ -529,41 +434,27 @@ class DashboardPage extends StatelessWidget {
 // STAT CARD
 // =========================================================
 
-Widget statCard(
-  String title,
-  String value,
-  IconData icon,
-) {
-  const Color primaryColor =
-      Color(0xFF7B1E3A);
+Widget statCard(String title, String value, IconData icon) {
+  const Color primaryColor = Color(0xFF7B1E3A);
 
   return Card(
     elevation: 4,
 
     shadowColor: Colors.black12,
 
-    shape: RoundedRectangleBorder(
-      borderRadius:
-          BorderRadius.circular(18),
-    ),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
 
     child: Padding(
-      padding:
-          const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(18),
 
       child: Column(
         children: [
-
           CircleAvatar(
             radius: 20,
 
-            backgroundColor:
-                const Color(0xFFF7E7EB),
+            backgroundColor: const Color(0xFFF7E7EB),
 
-            child: Icon(
-              icon,
-              color: primaryColor,
-            ),
+            child: Icon(icon, color: primaryColor),
           ),
 
           const SizedBox(height: 12),
@@ -583,13 +474,9 @@ Widget statCard(
           Text(
             title,
 
-            textAlign:
-                TextAlign.center,
+            textAlign: TextAlign.center,
 
-            style: const TextStyle(
-              color: Colors.grey,
-              fontSize: 13,
-            ),
+            style: const TextStyle(color: Colors.grey, fontSize: 13),
           ),
         ],
       ),
@@ -605,78 +492,65 @@ Widget menuCard(
   BuildContext context,
   IconData icon,
   String title,
-  Widget? page,
-) {
-  const Color primaryColor =
-      Color(0xFF7B1E3A);
+  Widget? page, {
+  String? route,
+}) {
+  const Color primaryColor = Color(0xFF7B1E3A);
 
   return Card(
     elevation: 4,
 
     shadowColor: Colors.black12,
 
-    shape: RoundedRectangleBorder(
-      borderRadius:
-          BorderRadius.circular(18),
-    ),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
 
     child: InkWell(
-      borderRadius:
-          BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(18),
 
       onTap: () {
+        // =================================================
+        // JIKA ADA ROUTE
+        // =================================================
 
-        // Kalau belum ada halaman
+        if (route != null) {
+          context.go(route);
+          return;
+        }
+
+        // =================================================
+        // JIKA BELUM ADA HALAMAN
+        // =================================================
+
         if (page == null) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(
-            SnackBar(
-              content: Text(
-                "$title belum tersedia",
-              ),
-            ),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text("$title belum tersedia")));
 
           return;
         }
 
-        Navigator.push(
-          context,
+        // =================================================
+        // HALAMAN YANG MASIH PAKAI NAVIGATOR
+        // =================================================
 
-          MaterialPageRoute(
-            builder: (context) => page,
-          ),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (context) => page));
       },
 
       child: Column(
-        mainAxisAlignment:
-            MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.center,
 
         children: [
-
           CircleAvatar(
             radius: 22,
 
-            backgroundColor:
-                const Color(0xFFF7E7EB),
+            backgroundColor: const Color(0xFFF7E7EB),
 
-            child: Icon(
-              icon,
-              color: primaryColor,
-            ),
+            child: Icon(icon, color: primaryColor),
           ),
 
           const SizedBox(height: 12),
 
-          Text(
-            title,
-
-            style: const TextStyle(
-              fontWeight:
-                  FontWeight.w600,
-            ),
-          ),
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         ],
       ),
     ),
@@ -687,60 +561,28 @@ Widget menuCard(
 // ACTIVITY CARD
 // =========================================================
 
-Widget activityCard(
-  IconData icon,
-  Color color,
-  String title,
-  String subtitle,
-) {
+Widget activityCard(IconData icon, Color color, String title, String subtitle) {
   return Card(
-    margin:
-        const EdgeInsets.symmetric(
-      horizontal: 20,
-      vertical: 6,
-    ),
+    margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
 
     elevation: 3,
 
-    shadowColor:
-        Colors.black12,
+    shadowColor: Colors.black12,
 
-    shape:
-        RoundedRectangleBorder(
-      borderRadius:
-          BorderRadius.circular(18),
-    ),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
 
     child: ListTile(
       leading: CircleAvatar(
-        backgroundColor:
-            color.withValues(
-          alpha: 0.15,
-        ),
+        backgroundColor: color.withValues(alpha: 0.15),
 
-        child: Icon(
-          icon,
-          color: color,
-        ),
+        child: Icon(icon, color: color),
       ),
 
-      title: Text(
-        title,
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
 
-        style: const TextStyle(
-          fontWeight:
-              FontWeight.w600,
-        ),
-      ),
+      subtitle: Text(subtitle),
 
-      subtitle: Text(
-        subtitle,
-      ),
-
-      trailing: const Icon(
-        Icons.arrow_forward_ios,
-        size: 16,
-      ),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
     ),
   );
 }

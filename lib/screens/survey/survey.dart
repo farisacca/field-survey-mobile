@@ -1,4 +1,13 @@
+import 'dart:convert';
+
+import 'package:field_survey/screens/survey/SurveyFormPage.dart';
+import 'package:field_survey/screens/survey/survey_detail_page.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:field_survey/routes/app_routes.dart';
+import 'package:field_survey/screens/auth/login.dart';
 
 class SurveyPage extends StatefulWidget {
   const SurveyPage({super.key});
@@ -8,532 +17,574 @@ class SurveyPage extends StatefulWidget {
 }
 
 class _SurveyPageState extends State<SurveyPage> {
-  final _formKey = GlobalKey<FormState>();
+  // =========================================================
+  // 1. STATE & VARIABLE HALAMAN
+  // =========================================================
 
-  final namaController = TextEditingController();
-  final umurController = TextEditingController();
-  final alamatController = TextEditingController();
-  final keteranganController = TextEditingController();
+  // Menyimpan data survey yang berhasil diambil dari API
+  List<Map<String, dynamic>> surveys = [];
 
-  String? selectedGender;
+  // Menandakan sedang loading saat mengambil data dari server
+  bool isLoading = true;
+
+  // Menyimpan pesan error jika gagal terhubung ke server
+  String? errorMessage;
+
+  // Endpoint API untuk mengambil daftar survey
+  final String apiUrl = 'https://sijala.biz.id/api/v1/surveys';
+
+  // Warna utama aplikasi
+  static const Color primaryColor = Color(0xFF7B1E3A);
+
+  // =========================================================
+  // 2. LIFECYCLE
+  // =========================================================
 
   @override
-  void dispose() {
-    namaController.dispose();
-    umurController.dispose();
-    alamatController.dispose();
-    keteranganController.dispose();
+  void initState() {
+    super.initState();
 
-    super.dispose();
+    // Ambil data survey ketika halaman pertama dibuka
+    fetchSurveys();
   }
+
+  // =========================================================
+  // 3. REST API - MENGAMBIL DAFTAR SURVEY
+  // =========================================================
+
+  Future<void> fetchSurveys() async {
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
+
+    try {
+      // Mengambil token dari SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      // Jika token kosong, pengguna harus login kembali
+      if (token.isEmpty) {
+        if (!mounted) return;
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+        );
+
+        return;
+      }
+
+      // Request GET ke API
+      final response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      // Jika token sudah tidak valid / expired
+      if (response.statusCode == 401) {
+        await prefs.remove('token');
+        await prefs.remove('user');
+
+        if (!mounted) return;
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+        );
+
+        return;
+      }
+
+      // Jika request berhasil
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+
+        // Mengecek status dari API
+        if (data['status'] == true && data['data'] is List) {
+          final List<dynamic> listData = data['data'];
+
+          setState(() {
+            surveys = listData
+                .map<Map<String, dynamic>>(
+                  (item) => Map<String, dynamic>.from(item),
+                )
+                .toList();
+
+            isLoading = false;
+          });
+
+          return;
+        }
+
+        // Jika data kosong
+        setState(() {
+          surveys = [];
+          isLoading = false;
+        });
+
+        return;
+      }
+
+      // Jika response bukan 200
+      setState(() {
+        isLoading = false;
+        errorMessage = 'Gagal mengambil data survey.';
+      });
+    } catch (e) {
+      setState(() {
+        isLoading = false;
+        errorMessage = 'Tidak dapat terhubung ke server. Periksa koneksi Anda.';
+      });
+    }
+  }
+
+  // =========================================================
+  // 4. NAVIGASI DETAIL SURVEY
+  // =========================================================
+
+  Future<void> openSurveyDetail(Map<String, dynamic> survey) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SurveyDetailPage(surveyId: survey['id']),
+      ),
+    );
+
+    // Jika kembali dari halaman detail
+    // dan ada perubahan data survey
+    if (result == true && mounted) {
+      fetchSurveys();
+    }
+  }
+
+  // =========================================================
+  // 5. NAVIGASI FORM TAMBAH SURVEY
+  // =========================================================
+
+  Future<void> openSurveyForm() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SurveyFormPage()),
+    );
+
+    // Jika berhasil menambahkan survey,
+    // ambil ulang data dari API
+    if (result == true && mounted) {
+      fetchSurveys();
+    }
+  }
+
+  // =========================================================
+  // 6. HELPER FORMAT DATA
+  // =========================================================
+
+  String getSurveyCategory(Map<String, dynamic> survey) {
+    if (survey['category'] != null &&
+        survey['category'].toString().isNotEmpty) {
+      return survey['category'].toString();
+    }
+
+    if (survey['survey'] is Map && survey['survey']['category'] != null) {
+      return survey['survey']['category'].toString();
+    }
+
+    return 'Tipe Survey';
+  }
+
+  String formatDate(dynamic date) {
+    if (date == null || date.toString().isEmpty) {
+      return '-';
+    }
+
+    try {
+      final parsed = DateTime.parse(date.toString());
+
+      return '${parsed.day.toString().padLeft(2, '0')}/'
+          '${parsed.month.toString().padLeft(2, '0')}/'
+          '${parsed.year}';
+    } catch (e) {
+      return date.toString();
+    }
+  }
+
+  // =========================================================
+  // 7. BUILD TAMPILAN
+  // =========================================================
 
   @override
   Widget build(BuildContext context) {
-    const Color primaryColor = Color(0xFF7B1E3A);
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: const Color(0xFFF8F8F8),
 
       // =====================================================
       // APP BAR
       // =====================================================
-
       appBar: AppBar(
         backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
         elevation: 0,
 
         title: const Text(
-          "Survey Lapangan",
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+          'Survey',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
 
-        centerTitle: true,
+        centerTitle: false,
+
+        actions: [
+          IconButton(
+            onPressed: fetchSurveys,
+            icon: const Icon(Icons.refresh, color: Colors.white),
+          ),
+        ],
       ),
 
       // =====================================================
       // BODY
       // =====================================================
+      body: RefreshIndicator(
+        color: primaryColor,
 
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        onRefresh: fetchSurveys,
 
-        child: Form(
-          key: _formKey,
+        child: isLoading
+            ? const Center(
+                child: CircularProgressIndicator(color: primaryColor),
+              )
+            : errorMessage != null
+            ? _buildErrorState()
+            : surveys.isEmpty
+            ? _buildEmptyState()
+            : _buildSurveyList(),
+      ),
 
-          child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+      // =====================================================
+      // FLOATING ACTION BUTTON
+      // =====================================================
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: openSurveyForm,
 
-            children: [
+        backgroundColor: primaryColor,
 
-              // =================================================
-              // HEADER
-              // =================================================
+        icon: const Icon(Icons.add, color: Colors.white),
 
-              Container(
-                width: double.infinity,
+        label: const Text(
+          'Tambah Survey',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
 
-                padding: const EdgeInsets.all(20),
+  // =========================================================
+  // 8. TAMPILAN LIST SURVEY
+  // =========================================================
 
-                decoration: BoxDecoration(
-                  color: primaryColor,
+  Widget _buildSurveyList() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
 
-                  borderRadius:
-                      BorderRadius.circular(20),
+      itemCount: surveys.length,
 
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 8,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
+      itemBuilder: (context, index) {
+        final survey = surveys[index];
 
-                child: Row(
-                  children: [
+        final String title =
+            survey['title']?.toString() ??
+            survey['name']?.toString() ??
+            'Survey';
 
-                    Container(
-                      width: 55,
-                      height: 55,
+        final String description = survey['description']?.toString() ?? '';
 
-                      decoration: BoxDecoration(
-                        color: Colors.white,
+        final String category = getSurveyCategory(survey);
 
-                        borderRadius:
-                            BorderRadius.circular(16),
-                      ),
+        final String date = formatDate(
+          survey['created_at'] ?? survey['createdAt'],
+        );
 
-                      child: const Icon(
-                        Icons.assignment_outlined,
+        return GestureDetector(
+          onTap: () {
+            openSurveyDetail(survey);
+          },
 
-                        color: primaryColor,
+          child: Card(
+            elevation: 4,
 
-                        size: 30,
-                      ),
-                    ),
+            shadowColor: Colors.black12,
 
-                    const SizedBox(width: 15),
+            margin: const EdgeInsets.only(bottom: 15),
 
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
 
-                        children: [
+            child: Padding(
+              padding: const EdgeInsets.all(18),
 
-                          Text(
-                            "Survey Lapangan",
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
 
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight:
-                                  FontWeight.bold,
-                            ),
-                          ),
-
-                          SizedBox(height: 5),
-
-                          Text(
-                            "Isi data survey dengan lengkap",
-
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 25),
-
-              // =================================================
-              // STATISTIK
-              // =================================================
-
-              Row(
                 children: [
+                  // =================================================
+                  // HEADER CARD
+                  // =================================================
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 24,
 
-                  Expanded(
-                    child: surveyInfoCard(
-                      "Survey Hari Ini",
-                      "12",
-                      Icons.assignment,
-                    ),
-                  ),
+                        backgroundColor: const Color(0xFFF7E7EB),
 
-                  const SizedBox(width: 15),
+                        child: const Icon(
+                          Icons.assignment_outlined,
+                          color: primaryColor,
+                        ),
+                      ),
 
-                  Expanded(
-                    child: surveyInfoCard(
-                      "Survey Selesai",
-                      "10",
-                      Icons.check_circle_outline,
-                    ),
-                  ),
-                ],
-              ),
+                      const SizedBox(width: 14),
 
-              const SizedBox(height: 30),
+                      Expanded(
+                        child: Text(
+                          title,
 
-              // =================================================
-              // JUDUL DATA SURVEY
-              // =================================================
-
-              const Text(
-                "Data Survey",
-
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              const Text(
-                "Masukkan informasi yang diperoleh saat melakukan survey lapangan.",
-
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontSize: 14,
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // =================================================
-              // NAMA
-              // =================================================
-
-              TextFormField(
-                controller: namaController,
-
-                decoration: inputDecoration(
-                  "Nama Lengkap",
-                  Icons.person_outline,
-                ),
-
-                validator: (value) {
-                  if (value == null ||
-                      value.isEmpty) {
-                    return "Nama harus diisi";
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 18),
-
-              // =================================================
-              // UMUR
-              // =================================================
-
-              TextFormField(
-                controller: umurController,
-
-                keyboardType:
-                    TextInputType.number,
-
-                decoration: inputDecoration(
-                  "Umur",
-                  Icons.cake_outlined,
-                ),
-
-                validator: (value) {
-                  if (value == null ||
-                      value.isEmpty) {
-                    return "Umur harus diisi";
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 18),
-
-              // =================================================
-              // JENIS KELAMIN
-              // =================================================
-
-              DropdownButtonFormField<String>(
-                initialValue: selectedGender,
-
-                decoration: inputDecoration(
-                  "Jenis Kelamin",
-                  Icons.people_outline,
-                ),
-
-                items: const [
-
-                  DropdownMenuItem(
-                    value: "Laki-laki",
-                    child: Text("Laki-laki"),
-                  ),
-
-                  DropdownMenuItem(
-                    value: "Perempuan",
-                    child: Text("Perempuan"),
-                  ),
-                ],
-
-                onChanged: (value) {
-                  setState(() {
-                    selectedGender = value;
-                  });
-                },
-
-                validator: (value) {
-                  if (value == null) {
-                    return "Pilih jenis kelamin";
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 18),
-
-              // =================================================
-              // ALAMAT
-              // =================================================
-
-              TextFormField(
-                controller: alamatController,
-
-                maxLines: 3,
-
-                decoration: inputDecoration(
-                  "Alamat / Lokasi Survey",
-                  Icons.location_on_outlined,
-                ),
-
-                validator: (value) {
-                  if (value == null ||
-                      value.isEmpty) {
-                    return "Alamat harus diisi";
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 18),
-
-              // =================================================
-              // KETERANGAN
-              // =================================================
-
-              TextFormField(
-                controller:
-                    keteranganController,
-
-                maxLines: 4,
-
-                decoration: inputDecoration(
-                  "Hasil / Keterangan Survey",
-                  Icons.description_outlined,
-                ),
-              ),
-
-              const SizedBox(height: 30),
-
-              // =================================================
-              // BUTTON SIMPAN
-              // =================================================
-
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-
-                child: ElevatedButton.icon(
-                  style:
-                      ElevatedButton.styleFrom(
-                    backgroundColor:
-                        primaryColor,
-
-                    foregroundColor:
-                        Colors.white,
-
-                    elevation: 4,
-
-                    shape:
-                        RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(16),
-                    ),
-                  ),
-
-                  icon: const Icon(
-                    Icons.save_outlined,
-                  ),
-
-                  label: const Text(
-                    "Simpan Survey",
-
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight:
-                          FontWeight.bold,
-                    ),
-                  ),
-
-                  onPressed: () {
-
-                    if (_formKey.currentState!
-                        .validate()) {
-
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            "Data survey berhasil disimpan",
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      );
-                    }
-                  },
-                ),
+                      ),
+
+                      const Icon(
+                        Icons.arrow_forward_ios,
+                        size: 16,
+                        color: Colors.grey,
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 15),
+
+                  // =================================================
+                  // CATEGORY
+                  // =================================================
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF7E7EB),
+
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+
+                    child: Text(
+                      category,
+
+                      style: const TextStyle(
+                        color: primaryColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // =================================================
+                  // DESCRIPTION
+                  // =================================================
+                  if (description.isNotEmpty)
+                    Text(
+                      description,
+
+                      maxLines: 2,
+
+                      overflow: TextOverflow.ellipsis,
+
+                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+
+                  const SizedBox(height: 12),
+
+                  // =================================================
+                  // DATE
+                  // =================================================
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.calendar_today,
+                        size: 14,
+                        color: primaryColor,
+                      ),
+
+                      const SizedBox(width: 7),
+
+                      Text(
+                        date,
+
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-
-              const SizedBox(height: 20),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
   // =========================================================
-  // INPUT DECORATION
+  // 9. KONDISI ERROR
   // =========================================================
 
-  InputDecoration inputDecoration(
-    String hint,
-    IconData icon,
-  ) {
-    const Color primaryColor =
-        Color(0xFF7B1E3A);
-
-    return InputDecoration(
-      hintText: hint,
-
-      prefixIcon: Icon(
-        icon,
-        color: primaryColor,
-      ),
-
-      filled: true,
-
-      fillColor: Colors.white,
-
-      border: OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(15),
-
-        borderSide:
-            BorderSide.none,
-      ),
-
-      enabledBorder:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(15),
-
-        borderSide: const BorderSide(
-          color: Color(0xFFE5E5E5),
-        ),
-      ),
-
-      focusedBorder:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(15),
-
-        borderSide: const BorderSide(
-          color: primaryColor,
-          width: 2,
-        ),
-      ),
-    );
-  }
-
-  // =========================================================
-  // SURVEY INFO CARD
-  // =========================================================
-
-  Widget surveyInfoCard(
-    String title,
-    String value,
-    IconData icon,
-  ) {
-    const Color primaryColor =
-        Color(0xFF7B1E3A);
-
-    return Card(
-      elevation: 4,
-
-      shadowColor: Colors.black12,
-
-      shape: RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.circular(18),
-      ),
-
+  Widget _buildErrorState() {
+    return Center(
       child: Padding(
-        padding:
-            const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(25),
 
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+
           children: [
+            Container(
+              padding: const EdgeInsets.all(20),
 
-            CircleAvatar(
-              radius: 21,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF7E7EB),
 
-              backgroundColor:
-                  const Color(0xFFF7E7EB),
-
-              child: Icon(
-                icon,
-                color: primaryColor,
+                shape: BoxShape.circle,
               ),
+
+              child: const Icon(Icons.wifi_off, size: 45, color: primaryColor),
+            ),
+
+            const SizedBox(height: 20),
+
+            const Text(
+              'Gagal Memuat Data',
+
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
 
             const SizedBox(height: 10),
 
             Text(
-              value,
+              errorMessage ?? 'Terjadi kesalahan.',
+              textAlign: TextAlign.center,
 
-              style: const TextStyle(
+              style: const TextStyle(color: Colors.grey),
+            ),
+
+            const SizedBox(height: 25),
+
+            ElevatedButton.icon(
+              onPressed: fetchSurveys,
+
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryColor,
+
+                foregroundColor: Colors.white,
+
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 22,
+                  vertical: 13,
+                ),
+
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+
+              icon: const Icon(Icons.refresh),
+
+              label: const Text('Coba Lagi'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // =========================================================
+  // 10. KONDISI DATA KOSONG
+  // =========================================================
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(25),
+
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+
+              decoration: BoxDecoration(
+                color: const Color(0xFFF7E7EB),
+
+                shape: BoxShape.circle,
+              ),
+
+              child: const Icon(
+                Icons.assignment_outlined,
+                size: 50,
                 color: primaryColor,
-                fontSize: 23,
-                fontWeight:
-                    FontWeight.bold,
               ),
             ),
 
-            const SizedBox(height: 4),
+            const SizedBox(height: 20),
 
-            Text(
-              title,
+            const Text(
+              'Belum Ada Data Survey',
 
-              textAlign:
-                  TextAlign.center,
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
 
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 12,
+            const SizedBox(height: 10),
+
+            const Text(
+              'Belum ada survey yang tersedia saat ini.',
+
+              textAlign: TextAlign.center,
+
+              style: TextStyle(color: Colors.grey),
+            ),
+
+            const SizedBox(height: 25),
+
+            ElevatedButton.icon(
+              onPressed: openSurveyForm,
+
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryColor,
+
+                foregroundColor: Colors.white,
+
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 22,
+                  vertical: 13,
+                ),
+
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
+
+              icon: const Icon(Icons.add),
+
+              label: const Text('Tambah Survey'),
             ),
           ],
         ),

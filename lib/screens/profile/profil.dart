@@ -1,8 +1,13 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:field_survey/routes/app_routes.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -13,7 +18,7 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   // =========================================================
-  // COLOR
+  // WARNA
   // =========================================================
 
   static const Color primaryColor = Color(0xFF7B1E3A);
@@ -22,24 +27,38 @@ class _ProfilePageState extends State<ProfilePage> {
   // API
   // =========================================================
 
-  final String profileUrl =
-      'https://sijala.biz.id/api/v1/profile';
+  static const String baseUrl = 'https://sijala.biz.id/api/v1';
 
-  final String updateProfileUrl =
-      'https://sijala.biz.id/api/v1/profile/update';
+  static const String profileUrl = '$baseUrl/profile';
+
+  static const String updateProfileUrl = '$baseUrl/profile/update';
+
+  static const String logoutUrl = '$baseUrl/logout';
 
   // =========================================================
-  // DATA PROFILE
+  // PROFILE
   // =========================================================
 
-  String nama = '-';
+  bool isLoading = true;
+  bool isSaving = false;
+  bool isUploadingPhoto = false;
+
+  String name = '-';
+  String username = '-';
   String email = '-';
   String phone = '-';
   String gender = '-';
-  String tempatLahir = '-';
-  String tanggalLahir = '-';
+  String birthPlace = '-';
+  String birthDate = '-';
 
-  bool isLoading = true;
+  String? photoName;
+
+  // =========================================================
+  // FOTO
+  // =========================================================
+
+  Uint8List? profileImage;
+  Uint8List? selectedPhoto;
 
   // =========================================================
   // INIT
@@ -48,679 +67,521 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
-    loadProfile();
+    getProfile();
   }
 
   // =========================================================
-  // SHOW ERROR
+  // TOKEN
   // =========================================================
 
-  void showError(String message) {
-    if (!mounted) return;
+  Future<String?> getToken() async {
+    final prefs = await SharedPreferences.getInstance();
 
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    final token = prefs.getString('token');
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(15),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-    );
-  }
+    print('======================================');
+    print('TOKEN');
+    print(token);
+    print('======================================');
 
-  // =========================================================
-  // SHOW SUCCESS
-  // =========================================================
-
-  void showSuccess(String message) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(15),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-    );
+    return token;
   }
 
   // =========================================================
   // GET PROFILE
   // =========================================================
 
-  Future<void> loadProfile() async {
-    if (mounted) {
-      setState(() {
-        isLoading = true;
-      });
-    }
-
+  Future<void> getProfile() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      if (mounted) {
+        setState(() {
+          isLoading = true;
+        });
+      }
 
-      final token = prefs.getString('token');
+      final token = await getToken();
 
-      debugPrint('========================================');
-      debugPrint('GET PROFILE');
-      debugPrint('TOKEN ADA: ${token != null && token.isNotEmpty}');
-      debugPrint('URL: $profileUrl');
-      debugPrint('========================================');
+      // =====================================================
+      // TOKEN TIDAK ADA
+      // =====================================================
 
       if (token == null || token.isEmpty) {
+        print('TOKEN TIDAK DITEMUKAN');
+
         if (!mounted) return;
 
         setState(() {
           isLoading = false;
         });
 
-        showError(
-          'Token login tidak ditemukan. Silakan login kembali.',
+        showMessage(
+          'Token tidak ditemukan. Silakan login kembali.',
+          Colors.red,
         );
 
         return;
       }
 
-      final response = await http.get(
-        Uri.parse(profileUrl),
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
+      print('======================================');
+      print('GET PROFILE');
+      print('URL: $profileUrl');
+      print('======================================');
 
-      debugPrint('========================================');
-      debugPrint('PROFILE STATUS: ${response.statusCode}');
-      debugPrint('PROFILE RESPONSE: ${response.body}');
-      debugPrint('========================================');
+      final response = await http
+          .get(
+            Uri.parse(profileUrl),
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 30));
+
+      print('======================================');
+      print('PROFILE STATUS: ${response.statusCode}');
+      print('PROFILE RESPONSE:');
+      print(response.body);
+      print('======================================');
+
+      dynamic result;
+
+      try {
+        result = jsonDecode(response.body);
+      } catch (e) {
+        print('JSON ERROR: $e');
+        result = {};
+      }
+
+      // =====================================================
+      // TOKEN EXPIRED / INVALID
+      // =====================================================
+
+      if (response.statusCode == 401) {
+        final prefs = await SharedPreferences.getInstance();
+
+        await prefs.remove('token');
+        await prefs.remove('user');
+
+        if (!mounted) return;
+
+        showMessage('Sesi login telah berakhir.', Colors.red);
+
+        context.go(AppRoutes.login);
+
+        return;
+      }
+
+      // =====================================================
+      // BERHASIL
+      // =====================================================
 
       if (response.statusCode == 200) {
-        dynamic data;
+        dynamic profileData;
 
-        try {
-          data = jsonDecode(response.body);
-        } catch (e) {
-          debugPrint('JSON ERROR: $e');
+        if (result is Map) {
+          if (result['data'] is Map) {
+            profileData = result['data'];
+          } else {
+            profileData = result;
+          }
+        }
 
-          if (mounted) {
-            setState(() {
-              isLoading = false;
-            });
+        if (profileData is Map) {
+          final data = Map<String, dynamic>.from(profileData);
+
+          // =================================================
+          // DATA PROFILE
+          // =================================================
+
+          final newName = data['name']?.toString() ?? '-';
+
+          final newUsername = data['username']?.toString() ?? '-';
+
+          final newEmail = data['email']?.toString() ?? '-';
+
+          final newPhone = data['phone']?.toString() ?? '-';
+
+          final newBirthPlace =
+              data['birth_place']?.toString() ??
+              data['birthPlace']?.toString() ??
+              '-';
+
+          final newBirthDate =
+              data['birth_date']?.toString() ??
+              data['birthDate']?.toString() ??
+              '-';
+
+          String newGender = '-';
+
+          final genderValue = data['gender']?.toString();
+
+          if (genderValue == 'L') {
+            newGender = 'Laki Laki';
+          } else if (genderValue == 'P') {
+            newGender = 'Perempuan';
+          } else if (genderValue != null && genderValue.isNotEmpty) {
+            newGender = genderValue;
           }
 
-          showError('Response dari server tidak valid.');
-          return;
-        }
+          String? newPhoto;
 
-        dynamic userData;
+          if (data['photo'] != null) {
+            final photoValue = data['photo'].toString();
 
-        // Response:
-        // {
-        //   "data": {...}
-        // }
+            if (photoValue.isNotEmpty && photoValue != 'null') {
+              newPhoto = photoValue;
+            }
+          }
 
-        if (data is Map && data['data'] != null) {
-          userData = data['data'];
-        }
+          // =================================================
+          // SET DATA
+          // =================================================
 
-        // Response:
-        // {
-        //   "user": {...}
-        // }
-
-        else if (data is Map && data['user'] != null) {
-          userData = data['user'];
-        }
-
-        // Response langsung object
-
-        else {
-          userData = data;
-        }
-
-        if (userData is Map) {
           if (!mounted) return;
 
           setState(() {
-            nama = _getValue(
-              userData,
-              [
-                'name',
-                'nama',
-                'nama_lengkap',
-              ],
-            );
-
-            email = _getValue(
-              userData,
-              [
-                'email',
-              ],
-            );
-
-            phone = _getValue(
-              userData,
-              [
-                'phone',
-                'no_hp',
-                'nomor_hp',
-                'telephone',
-                'no_telepon',
-              ],
-            );
-
-            gender = _getValue(
-              userData,
-              [
-                'gender',
-                'jenis_kelamin',
-              ],
-            );
-
-            tempatLahir = _getValue(
-              userData,
-              [
-                'birth_place',
-                'tempat_lahir',
-                'place_of_birth',
-              ],
-            );
-
-            tanggalLahir = _getValue(
-              userData,
-              [
-                'birth_date',
-                'tanggal_lahir',
-                'date_of_birth',
-              ],
-            );
-
-            isLoading = false;
+            name = newName;
+            username = newUsername;
+            email = newEmail;
+            phone = newPhone;
+            gender = newGender;
+            birthPlace = newBirthPlace;
+            birthDate = newBirthDate;
+            photoName = newPhoto;
           });
 
-          await prefs.setString(
-            'user',
-            jsonEncode(userData),
-          );
-        } else {
-          if (!mounted) return;
+          // =================================================
+          // SIMPAN DATA USER
+          // =================================================
 
-          setState(() {
-            isLoading = false;
-          });
+          final prefs = await SharedPreferences.getInstance();
 
-          showError(
-            'Data profile tidak ditemukan.',
-          );
-        }
-      }
+          await prefs.setString('user', jsonEncode(data));
 
-      // =====================================================
-      // 401
-      // =====================================================
+          // =================================================
+          // LOAD FOTO SERVER
+          // =================================================
 
-      else if (response.statusCode == 401) {
-        if (!mounted) return;
-
-        setState(() {
-          isLoading = false;
-        });
-
-        showError(
-          'Sesi login sudah berakhir. Silakan login kembali.',
-        );
-      }
-
-      // =====================================================
-      // ERROR
-      // =====================================================
-
-      else {
-        if (!mounted) return;
-
-        setState(() {
-          isLoading = false;
-        });
-
-        String message =
-            'Gagal mengambil profile (${response.statusCode}).';
-
-        try {
-          final errorData = jsonDecode(response.body);
-
-          if (errorData is Map &&
-              errorData['message'] != null) {
-            message = errorData['message'].toString();
+          if (newPhoto != null && newPhoto.isNotEmpty) {
+            await loadProfileImage(newPhoto);
+          } else {
+            await loadSavedPhoto(newEmail);
           }
-        } catch (_) {}
+        }
+      } else {
+        String message = 'Gagal mengambil data profile';
 
-        showError(message);
+        if (result is Map && result['message'] != null) {
+          message = result['message'].toString();
+        }
+
+        if (mounted) {
+          showMessage(message, Colors.red);
+        }
+
+        await loadSavedPhoto(email);
       }
     } catch (e) {
-      debugPrint('========================================');
-      debugPrint('GET PROFILE ERROR');
-      debugPrint(e.toString());
-      debugPrint('========================================');
+      print('======================================');
+      print('ERROR GET PROFILE');
+      print(e);
+      print('======================================');
+
+      await loadSavedPhoto(email);
+
+      if (mounted) {
+        showMessage('Tidak dapat terhubung ke server.', Colors.red);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  // =========================================================
+  // LOAD FOTO DARI SERVER
+  // =========================================================
+
+  Future<void> loadProfileImage(String fileName) async {
+    try {
+      final token = await getToken();
+
+      if (token == null || token.isEmpty) {
+        return;
+      }
+
+      final url = 'https://sijala.biz.id/api/image/$fileName';
+
+      print('======================================');
+      print('LOAD PROFILE IMAGE');
+      print(url);
+      print('======================================');
+
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: {'Authorization': 'Bearer $token', 'Accept': '*/*'},
+          )
+          .timeout(const Duration(seconds: 30));
+
+      print('IMAGE STATUS: ${response.statusCode}');
+
+      if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+
+        final photoKey = 'profile_photo_${email.toLowerCase()}';
+
+        await prefs.setString(photoKey, base64Encode(response.bodyBytes));
+
+        if (!mounted) return;
+
+        setState(() {
+          profileImage = response.bodyBytes;
+        });
+      } else {
+        await loadSavedPhoto(email);
+      }
+    } catch (e) {
+      print('ERROR LOAD IMAGE: $e');
+
+      await loadSavedPhoto(email);
+    }
+  }
+
+  // =========================================================
+  // LOAD FOTO LOCAL
+  // =========================================================
+
+  Future<void> loadSavedPhoto(String userEmail) async {
+    try {
+      if (userEmail.isEmpty || userEmail == '-') {
+        return;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+
+      final photoKey = 'profile_photo_${userEmail.toLowerCase()}';
+
+      final savedPhoto = prefs.getString(photoKey);
+
+      if (savedPhoto == null || savedPhoto.isEmpty) {
+        return;
+      }
+
+      final bytes = base64Decode(savedPhoto);
 
       if (!mounted) return;
 
       setState(() {
-        isLoading = false;
+        profileImage = bytes;
       });
-
-      showError(
-        'Tidak dapat terhubung ke server.',
-      );
+    } catch (e) {
+      print('ERROR LOAD SAVED PHOTO: $e');
     }
   }
 
   // =========================================================
-  // AMBIL VALUE DARI JSON
+  // PILIH FOTO
   // =========================================================
 
-  String _getValue(
-    Map data,
-    List<String> keys,
-  ) {
-    for (final key in keys) {
-      final value = data[key];
-
-      if (value != null &&
-          value.toString().trim().isNotEmpty &&
-          value.toString() != 'null') {
-        return value.toString();
-      }
+  Future<void> pickPhoto() async {
+    if (isUploadingPhoto) {
+      return;
     }
-
-    return '-';
-  }
-
-  // =========================================================
-  // UPDATE PROFILE
-  // =========================================================
-
-  Future<bool> updateProfile({
-    required String namaBaru,
-    required String emailBaru,
-    required String phoneBaru,
-    required String genderBaru,
-    required String tempatLahirBaru,
-    required String tanggalLahirBaru,
-  }) async {
-    bool loadingShown = false;
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-
-      final token = prefs.getString('token');
-
-      debugPrint('========================================');
-      debugPrint('UPDATE PROFILE');
-      debugPrint(
-        'TOKEN ADA: ${token != null && token.isNotEmpty}',
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
       );
-      debugPrint('URL: $updateProfileUrl');
-      debugPrint('========================================');
+
+      if (result == null) {
+        return;
+      }
+
+      final file = result.files.single;
+
+      if (file.bytes == null) {
+        showMessage('File gambar tidak bisa dibaca.', Colors.red);
+
+        return;
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        selectedPhoto = file.bytes;
+        profileImage = file.bytes;
+      });
+
+      await uploadPhoto(file.bytes!, file.name);
+    } catch (e) {
+      print('ERROR PICK PHOTO: $e');
+
+      if (mounted) {
+        showMessage('Gagal memilih foto.', Colors.red);
+      }
+    }
+  }
+
+  // =========================================================
+  // UPLOAD FOTO
+  // =========================================================
+
+  Future<void> uploadPhoto(Uint8List bytes, String fileName) async {
+    try {
+      if (mounted) {
+        setState(() {
+          isUploadingPhoto = true;
+        });
+      }
+
+      final token = await getToken();
 
       if (token == null || token.isEmpty) {
-        showError(
-          'Token login tidak ditemukan.',
-        );
+        showMessage('Token tidak ditemukan.', Colors.red);
 
-        return false;
+        return;
       }
 
-      // =====================================================
-      // VALIDASI
-      // =====================================================
-
-      if (namaBaru.trim().isEmpty) {
-        showError(
-          'Nama tidak boleh kosong.',
-        );
-        return false;
-      }
-
-      if (emailBaru.trim().isEmpty) {
-        showError(
-          'Email tidak boleh kosong.',
-        );
-        return false;
-      }
-
-      if (phoneBaru.trim().isEmpty) {
-        showError(
-          'Nomor HP tidak boleh kosong.',
-        );
-        return false;
-      }
-
-      if (genderBaru.trim().isEmpty) {
-        showError(
-          'Jenis kelamin harus dipilih.',
-        );
-        return false;
-      }
-
-      if (tempatLahirBaru.trim().isEmpty) {
-        showError(
-          'Tempat lahir tidak boleh kosong.',
-        );
-        return false;
-      }
-
-      if (tanggalLahirBaru.trim().isEmpty) {
-        showError(
-          'Tanggal lahir harus dipilih.',
-        );
-        return false;
-      }
-
-      // =====================================================
-      // LOADING
-      // =====================================================
-
-      if (!mounted) return false;
-
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) {
-          return const Center(
-            child: CircularProgressIndicator(
-              color: primaryColor,
-            ),
-          );
-        },
-      );
-
-      loadingShown = true;
-
-      // =====================================================
-      // MULTIPART REQUEST
-      // =====================================================
+      print('======================================');
+      print('UPLOAD FOTO');
+      print('FILE: $fileName');
+      print('======================================');
 
       final request = http.MultipartRequest(
         'POST',
         Uri.parse(updateProfileUrl),
       );
 
-      // =====================================================
-      // HEADER
-      // =====================================================
+      request.headers['Accept'] = 'application/json';
 
-      request.headers.addAll({
-        'Accept': 'application/json',
-        'Authorization': 'Bearer $token',
-      });
+      request.headers['Authorization'] = 'Bearer $token';
 
       // =====================================================
-      // DATA
+      // PROFILE
       // =====================================================
 
-      request.fields['name'] =
-          namaBaru.trim();
+      if (name != '-' && name.isNotEmpty) {
+        request.fields['name'] = name;
+      }
 
-      request.fields['email'] =
-          emailBaru.trim();
+      if (phone != '-' && phone.isNotEmpty) {
+        request.fields['phone'] = phone;
+      }
 
-      request.fields['phone'] =
-          phoneBaru.trim();
-
-      request.fields['gender'] =
-          genderBaru.trim();
-
-      request.fields['birth_place'] =
-          tempatLahirBaru.trim();
-
-      request.fields['birth_date'] =
-          tanggalLahirBaru.trim();
+      if (gender == 'Laki Laki') {
+        request.fields['gender'] = 'L';
+      } else if (gender == 'Perempuan') {
+        request.fields['gender'] = 'P';
+      }
 
       // =====================================================
-      // DEBUG
+      // FOTO
       // =====================================================
 
-      debugPrint('========================================');
-      debugPrint('UPDATE PROFILE BODY');
-      debugPrint('name        : ${namaBaru.trim()}');
-      debugPrint('email       : ${emailBaru.trim()}');
-      debugPrint('phone       : ${phoneBaru.trim()}');
-      debugPrint('gender      : ${genderBaru.trim()}');
-      debugPrint(
-        'birth_place : ${tempatLahirBaru.trim()}',
-      );
-      debugPrint(
-        'birth_date  : ${tanggalLahirBaru.trim()}',
-      );
-      debugPrint('========================================');
-
-      // =====================================================
-      // SEND
-      // =====================================================
-
-      final streamedResponse =
-          await request.send();
-
-      final response =
-          await http.Response.fromStream(
-        streamedResponse,
+      request.files.add(
+        http.MultipartFile.fromBytes('photo', bytes, filename: fileName),
       );
 
-      debugPrint('========================================');
-      debugPrint(
-        'UPDATE STATUS: ${response.statusCode}',
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 30),
       );
-      debugPrint(
-        'UPDATE RESPONSE: ${response.body}',
-      );
-      debugPrint('========================================');
 
-      // =====================================================
-      // TUTUP LOADING
-      // =====================================================
+      final response = await http.Response.fromStream(streamedResponse);
 
-      if (mounted && loadingShown) {
-        Navigator.of(context).pop();
-        loadingShown = false;
-      }
+      print('======================================');
+      print('UPLOAD STATUS: ${response.statusCode}');
+      print('UPLOAD RESPONSE:');
+      print(response.body);
+      print('======================================');
 
-      if (!mounted) return false;
-
-      // =====================================================
-      // BERHASIL
-      // =====================================================
-
-      if (response.statusCode == 200 ||
-          response.statusCode == 201) {
-        dynamic data;
-
-        try {
-          data = jsonDecode(response.body);
-        } catch (_) {
-          data = null;
-        }
-
-        dynamic userData;
-
-        if (data is Map &&
-            data['data'] != null) {
-          userData = data['data'];
-        } else if (data is Map &&
-            data['user'] != null) {
-          userData = data['user'];
-        }
-
-        // ===================================================
-        // UPDATE UI
-        // ===================================================
-
-        setState(() {
-          nama = namaBaru.trim();
-          email = emailBaru.trim();
-          phone = phoneBaru.trim();
-          gender = genderBaru.trim();
-          tempatLahir = tempatLahirBaru.trim();
-          tanggalLahir = tanggalLahirBaru.trim();
-        });
-
-        // ===================================================
-        // SIMPAN CACHE
-        // ===================================================
-
-        if (userData is Map) {
-          await prefs.setString(
-            'user',
-            jsonEncode(userData),
-          );
-        } else {
-          await prefs.setString(
-            'user',
-            jsonEncode({
-              'name': namaBaru.trim(),
-              'email': emailBaru.trim(),
-              'phone': phoneBaru.trim(),
-              'gender': genderBaru.trim(),
-              'birth_place':
-                  tempatLahirBaru.trim(),
-              'birth_date':
-                  tanggalLahirBaru.trim(),
-            }),
-          );
-        }
-
-        showSuccess(
-          'Profil berhasil diperbarui.',
-        );
-
-        return true;
-      }
-
-      // =====================================================
-      // 401
-      // =====================================================
-
-      if (response.statusCode == 401) {
-        showError(
-          'Token tidak valid atau sesi sudah berakhir.',
-        );
-
-        return false;
-      }
-
-      // =====================================================
-      // 404
-      // =====================================================
-
-      if (response.statusCode == 404) {
-        showError(
-          'Endpoint update profile tidak ditemukan.',
-        );
-
-        return false;
-      }
-
-      // =====================================================
-      // 405
-      // =====================================================
-
-      if (response.statusCode == 405) {
-        showError(
-          'Method request tidak sesuai dengan API.',
-        );
-
-        return false;
-      }
-
-      // =====================================================
-      // 422
-      // =====================================================
-
-      if (response.statusCode == 422) {
-        String message =
-            'Data profile tidak valid.';
-
-        try {
-          final data =
-              jsonDecode(response.body);
-
-          debugPrint(
-            'VALIDATION DATA: $data',
-          );
-
-          if (data is Map &&
-              data['message'] != null) {
-            message =
-                data['message'].toString();
-          }
-
-          if (data is Map &&
-              data['errors'] != null) {
-            debugPrint(
-              'VALIDATION ERRORS:',
-            );
-            debugPrint(
-              data['errors'].toString(),
-            );
-          }
-        } catch (e) {
-          debugPrint(
-            'Gagal decode validation: $e',
-          );
-        }
-
-        showError(message);
-
-        return false;
-      }
-
-      // =====================================================
-      // ERROR LAIN
-      // =====================================================
-
-      String message =
-          'Gagal memperbarui profil (${response.statusCode}).';
+      dynamic result;
 
       try {
-        final data =
-            jsonDecode(response.body);
-
-        if (data is Map &&
-            data['message'] != null) {
-          message =
-              data['message'].toString();
-        }
-      } catch (_) {}
-
-      showError(message);
-
-      return false;
-    } catch (e) {
-      debugPrint('========================================');
-      debugPrint('UPDATE PROFILE ERROR');
-      debugPrint(e.toString());
-      debugPrint('========================================');
-
-      if (mounted && loadingShown) {
-        Navigator.of(context).pop();
+        result = jsonDecode(response.body);
+      } catch (_) {
+        result = {};
       }
 
-      if (!mounted) return false;
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        String? newPhotoName;
 
-      showError(
-        'Tidak dapat terhubung ke server.',
-      );
+        if (result is Map) {
+          if (result['photo'] != null) {
+            newPhotoName = result['photo'].toString();
+          }
 
-      return false;
+          if ((newPhotoName == null || newPhotoName.isEmpty) &&
+              result['data'] is Map) {
+            final dataMap = Map<String, dynamic>.from(result['data']);
+
+            if (dataMap['photo'] != null) {
+              newPhotoName = dataMap['photo'].toString();
+            }
+          }
+        }
+
+        // ===================================================
+        // SIMPAN FOTO BERDASARKAN EMAIL
+        // ===================================================
+
+        final prefs = await SharedPreferences.getInstance();
+
+        final photoKey = 'profile_photo_${email.toLowerCase()}';
+
+        await prefs.setString(photoKey, base64Encode(bytes));
+
+        // ===================================================
+        // SIMPAN NAMA FOTO
+        // ===================================================
+
+        if (newPhotoName != null && newPhotoName.isNotEmpty) {
+          photoName = newPhotoName;
+
+          await prefs.setString(
+            'profile_photo_name_${email.toLowerCase()}',
+            newPhotoName,
+          );
+        }
+
+        if (mounted) {
+          setState(() {
+            profileImage = bytes;
+          });
+
+          showMessage('Foto profile berhasil diperbarui.', Colors.green);
+        }
+      } else {
+        String message = 'Gagal mengupload foto.';
+
+        if (result is Map && result['message'] != null) {
+          message = result['message'].toString();
+        }
+
+        if (mounted) {
+          showMessage(message, Colors.red);
+        }
+      }
+    } catch (e) {
+      print('======================================');
+      print('ERROR UPLOAD PHOTO');
+      print(e);
+      print('======================================');
+
+      if (mounted) {
+        showMessage('Gagal mengupload foto.', Colors.red);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isUploadingPhoto = false;
+          selectedPhoto = null;
+        });
+      }
     }
   }
 
@@ -728,756 +589,240 @@ class _ProfilePageState extends State<ProfilePage> {
   // EDIT PROFILE
   // =========================================================
 
-  void editProfile() {
-    final namaController =
-        TextEditingController(
-      text: nama == '-' ? '' : nama,
-    );
+  Future<void> editProfile() async {
+    final nameController = TextEditingController(text: name == '-' ? '' : name);
 
-    final emailController =
-        TextEditingController(
-      text: email == '-' ? '' : email,
-    );
-
-    final phoneController =
-        TextEditingController(
+    final phoneController = TextEditingController(
       text: phone == '-' ? '' : phone,
     );
 
-    final tempatLahirController =
-        TextEditingController(
-      text: tempatLahir == '-'
-          ? ''
-          : tempatLahir,
-    );
+    String selectedGender = gender;
 
-    String selectedGender = '';
-
-    if (gender == 'L' ||
-        gender == 'P') {
-      selectedGender = gender;
+    if (selectedGender != 'Laki Laki' && selectedGender != 'Perempuan') {
+      selectedGender = 'Laki Laki';
     }
 
-    String selectedDate =
-        tanggalLahir == '-'
-            ? ''
-            : tanggalLahir;
-
-    showModalBottomSheet(
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (modalContext) {
         return StatefulBuilder(
-          builder: (
-            context,
-            setModalState,
-          ) {
+          builder: (context, setModalState) {
             return Padding(
               padding: EdgeInsets.only(
-                bottom: MediaQuery.of(
-                  context,
-                ).viewInsets.bottom,
+                left: 20,
+                right: 20,
+                top: 12,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
               ),
-              child: Container(
-                constraints:
-                    BoxConstraints(
-                  maxHeight:
-                      MediaQuery.of(
-                            context,
-                          ).size.height *
-                          0.92,
-                ),
-                decoration:
-                    const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius:
-                      BorderRadius.only(
-                    topLeft:
-                        Radius.circular(
-                      30,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // HANDLE
+                    Center(
+                      child: Container(
+                        width: 45,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
                     ),
-                    topRight:
-                        Radius.circular(
-                      30,
+
+                    const SizedBox(height: 22),
+
+                    const Text(
+                      'Edit Profile',
+                      style: TextStyle(
+                        fontSize: 23,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ),
-                child:
-                    SingleChildScrollView(
-                  padding:
-                      const EdgeInsets
-                          .fromLTRB(
-                    20,
-                    15,
-                    20,
-                    25,
-                  ),
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment
-                            .start,
-                    children: [
-                      // =================================================
-                      // HANDLE
-                      // =================================================
 
-                      Center(
-                        child: Container(
-                          width: 45,
-                          height: 5,
-                          decoration:
-                              BoxDecoration(
-                            color: Colors
-                                .grey
-                                .shade300,
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              10,
-                            ),
+                    const SizedBox(height: 5),
+
+                    const Text(
+                      'Perbarui informasi profil kamu',
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+
+                    const SizedBox(height: 22),
+
+                    // =================================================
+                    // NAMA
+                    // =================================================
+                    TextField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Nama',
+                        prefixIcon: const Icon(
+                          Icons.person_outline_rounded,
+                          color: primaryColor,
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF8F6F7),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(15),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(15),
+                          borderSide: const BorderSide(
+                            color: primaryColor,
+                            width: 1.5,
                           ),
                         ),
                       ),
+                    ),
 
-                      const SizedBox(
-                        height: 20,
-                      ),
+                    const SizedBox(height: 15),
 
-                      // =================================================
-                      // HEADER
-                      // =================================================
-
-                      Row(
-                        children: [
-                          Container(
-                            width: 52,
-                            height: 52,
-                            decoration:
-                                BoxDecoration(
-                              color:
-                                  const Color(
-                                0xFFF7E7EB,
-                              ),
-                              borderRadius:
-                                  BorderRadius
-                                      .circular(
-                                16,
-                              ),
-                            ),
-                            child:
-                                const Icon(
-                              Icons
-                                  .edit_outlined,
-                              color:
-                                  primaryColor,
-                              size: 27,
-                            ),
-                          ),
-
-                          const SizedBox(
-                            width: 14,
-                          ),
-
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment
-                                      .start,
-                              children: [
-                                Text(
-                                  'Edit Profil',
-                                  style:
-                                      TextStyle(
-                                    fontSize:
-                                        23,
-                                    fontWeight:
-                                        FontWeight
-                                            .bold,
-                                    color:
-                                        primaryColor,
-                                  ),
-                                ),
-                                SizedBox(
-                                  height: 4,
-                                ),
-                                Text(
-                                  'Perbarui informasi profil kamu',
-                                  style:
-                                      TextStyle(
-                                    fontSize:
-                                        13,
-                                    color:
-                                        Colors
-                                            .grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(
-                        height: 25,
-                      ),
-
-                      // =================================================
-                      // NAMA
-                      // =================================================
-
-                      _editField(
-                        controller:
-                            namaController,
-                        label:
-                            'Nama Lengkap',
-                        icon: Icons
-                            .person_outline,
-                      ),
-
-                      const SizedBox(
-                        height: 15,
-                      ),
-
-                      // =================================================
-                      // EMAIL
-                      // =================================================
-
-                      _editField(
-                        controller:
-                            emailController,
-                        label: 'Email',
-                        icon: Icons
-                            .email_outlined,
-                        keyboardType:
-                            TextInputType
-                                .emailAddress,
-                      ),
-
-                      const SizedBox(
-                        height: 15,
-                      ),
-
-                      // =================================================
-                      // NOMOR HP
-                      // =================================================
-
-                      _editField(
-                        controller:
-                            phoneController,
-                        label: 'Nomor HP',
-                        icon: Icons
-                            .phone_outlined,
-                        keyboardType:
-                            TextInputType
-                                .phone,
-                      ),
-
-                      const SizedBox(
-                        height: 15,
-                      ),
-
-                      // =================================================
-                      // JENIS KELAMIN
-                      // =================================================
-
-                      DropdownButtonFormField<
-                          String>(
-                        value:
-                            selectedGender
-                                    .isEmpty
-                                ? null
-                                : selectedGender,
-                        decoration:
-                            InputDecoration(
-                          labelText:
-                              'Jenis Kelamin',
-                          prefixIcon:
-                              const Icon(
-                            Icons
-                                .people_outline,
-                            color:
-                                primaryColor,
-                          ),
-                          filled: true,
-                          fillColor:
-                              const Color(
-                            0xFFF8F8F8,
-                          ),
-                          contentPadding:
-                              const EdgeInsets
-                                  .symmetric(
-                            horizontal:
-                                15,
-                            vertical: 16,
-                          ),
-                          border:
-                              OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              15,
-                            ),
-                            borderSide:
-                                BorderSide
-                                    .none,
-                          ),
-                          enabledBorder:
-                              OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              15,
-                            ),
-                            borderSide:
-                                BorderSide
-                                    .none,
-                          ),
-                          focusedBorder:
-                              OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              15,
-                            ),
-                            borderSide:
-                                const BorderSide(
-                              color:
-                                  primaryColor,
-                              width: 1.5,
-                            ),
-                          ),
+                    // =================================================
+                    // NOMOR HP
+                    // =================================================
+                    TextField(
+                      controller: phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: InputDecoration(
+                        labelText: 'Nomor HP',
+                        prefixIcon: const Icon(
+                          Icons.phone_outlined,
+                          color: primaryColor,
                         ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'L',
-                            child: Text(
-                              'Laki-laki',
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: 'P',
-                            child: Text(
-                              'Perempuan',
-                            ),
-                          ),
-                        ],
-                        onChanged:
-                            (value) {
-                          setModalState(() {
-                            selectedGender =
-                                value ?? '';
-                          });
-                        },
-                      ),
-
-                      const SizedBox(
-                        height: 15,
-                      ),
-
-                      // =================================================
-                      // TEMPAT LAHIR
-                      // =================================================
-
-                      _editField(
-                        controller:
-                            tempatLahirController,
-                        label:
-                            'Tempat Lahir',
-                        icon: Icons
-                            .location_city_outlined,
-                      ),
-
-                      const SizedBox(
-                        height: 15,
-                      ),
-
-                      // =================================================
-                      // TANGGAL LAHIR
-                      // =================================================
-
-                      GestureDetector(
-                        onTap: () async {
-                          DateTime?
-                              pickedDate;
-
-                          DateTime
-                              initialDate =
-                              DateTime(
-                            2000,
-                            1,
-                            1,
-                          );
-
-                          if (selectedDate
-                              .isNotEmpty) {
-                            try {
-                              initialDate =
-                                  DateTime.parse(
-                                selectedDate,
-                              );
-                            } catch (_) {}
-                          }
-
-                          pickedDate =
-                              await showDatePicker(
-                            context: context,
-                            initialDate:
-                                initialDate,
-                            firstDate:
-                                DateTime(
-                              1900,
-                            ),
-                            lastDate:
-                                DateTime.now(),
-                            helpText:
-                                'Pilih Tanggal Lahir',
-                            cancelText:
-                                'Batal',
-                            confirmText:
-                                'Pilih',
-                            builder:
-                                (
-                              context,
-                              child,
-                            ) {
-                              return Theme(
-                                data: Theme.of(
-                                  context,
-                                ).copyWith(
-                                  colorScheme:
-                                      const ColorScheme.light(
-                                    primary:
-                                        primaryColor,
-                                  ),
-                                ),
-                                child:
-                                    child!,
-                              );
-                            },
-                          );
-
-                          if (pickedDate !=
-                              null) {
-                            final year =
-                                pickedDate!
-                                    .year
-                                    .toString()
-                                    .padLeft(
-                                      4,
-                                      '0',
-                                    );
-
-                            final month =
-                                pickedDate!
-                                    .month
-                                    .toString()
-                                    .padLeft(
-                                      2,
-                                      '0',
-                                    );
-
-                            final day =
-                                pickedDate!
-                                    .day
-                                    .toString()
-                                    .padLeft(
-                                      2,
-                                      '0',
-                                    );
-
-                            setModalState(() {
-                              selectedDate =
-                                  '$year-$month-$day';
-                            });
-                          }
-                        },
-                        child: Container(
-                          width:
-                              double.infinity,
-                          padding:
-                              const EdgeInsets
-                                  .symmetric(
-                            horizontal: 15,
-                            vertical: 16,
-                          ),
-                          decoration:
-                              BoxDecoration(
-                            color:
-                                const Color(
-                              0xFFF8F8F8,
-                            ),
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              15,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons
-                                    .calendar_month_outlined,
-                                color:
-                                    primaryColor,
-                              ),
-                              const SizedBox(
-                                width: 12,
-                              ),
-                              Expanded(
-                                child:
-                                    Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment
-                                          .start,
-                                  children: [
-                                    const Text(
-                                      'Tanggal Lahir',
-                                      style:
-                                          TextStyle(
-                                        fontSize:
-                                            12,
-                                        color:
-                                            Colors.grey,
-                                      ),
-                                    ),
-                                    const SizedBox(
-                                      height: 4,
-                                    ),
-                                    Text(
-                                      selectedDate
-                                              .isEmpty
-                                          ? 'Pilih tanggal lahir'
-                                          : _formatDate(
-                                              selectedDate,
-                                            ),
-                                      style:
-                                          TextStyle(
-                                        fontSize:
-                                            15,
-                                        fontWeight:
-                                            FontWeight
-                                                .w600,
-                                        color: selectedDate
-                                                .isEmpty
-                                            ? Colors
-                                                .grey
-                                            : Colors
-                                                .black87,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(
-                                Icons
-                                    .arrow_drop_down,
-                                color:
-                                    Colors.grey,
-                              ),
-                            ],
+                        filled: true,
+                        fillColor: const Color(0xFFF8F6F7),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(15),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(15),
+                          borderSide: const BorderSide(
+                            color: primaryColor,
+                            width: 1.5,
                           ),
                         ),
                       ),
+                    ),
 
-                      const SizedBox(
-                        height: 25,
+                    const SizedBox(height: 15),
+
+                    // =================================================
+                    // GENDER
+                    // =================================================
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedGender,
+                      decoration: InputDecoration(
+                        labelText: 'Jenis Kelamin',
+                        prefixIcon: const Icon(
+                          Icons.wc_outlined,
+                          color: primaryColor,
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF8F6F7),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(15),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(15),
+                          borderSide: const BorderSide(
+                            color: primaryColor,
+                            width: 1.5,
+                          ),
+                        ),
                       ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'Laki Laki',
+                          child: Text('Laki Laki'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Perempuan',
+                          child: Text('Perempuan'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) {
+                          return;
+                        }
 
-                      // =================================================
-                      // SIMPAN
-                      // =================================================
+                        setModalState(() {
+                          selectedGender = value;
+                        });
+                      },
+                    ),
 
-                      SizedBox(
-                        width:
-                            double.infinity,
-                        height: 55,
-                        child:
-                            ElevatedButton
-                                .icon(
-                          onPressed:
-                              () async {
-                            final namaValue =
-                                namaController
-                                    .text
-                                    .trim();
+                    const SizedBox(height: 25),
 
-                            final emailValue =
-                                emailController
-                                    .text
-                                    .trim();
+                    // =================================================
+                    // SIMPAN
+                    // =================================================
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: isSaving
+                            ? null
+                            : () async {
+                                final newName = nameController.text.trim();
 
-                            final phoneValue =
-                                phoneController
-                                    .text
-                                    .trim();
+                                final newPhone = phoneController.text.trim();
 
-                            final tempatLahirValue =
-                                tempatLahirController
-                                    .text
-                                    .trim();
+                                if (newName.isEmpty) {
+                                  showMessage('Nama wajib diisi.', Colors.red);
+                                  return;
+                                }
 
-                            // ==========================================
-                            // VALIDASI
-                            // ==========================================
+                                if (newPhone.isEmpty) {
+                                  showMessage(
+                                    'Nomor HP wajib diisi.',
+                                    Colors.red,
+                                  );
+                                  return;
+                                }
 
-                            if (namaValue
-                                .isEmpty) {
-                              showError(
-                                'Nama tidak boleh kosong.',
-                              );
-                              return;
-                            }
+                                Navigator.pop(modalContext);
 
-                            if (emailValue
-                                .isEmpty) {
-                              showError(
-                                'Email tidak boleh kosong.',
-                              );
-                              return;
-                            }
-
-                            if (phoneValue
-                                .isEmpty) {
-                              showError(
-                                'Nomor HP tidak boleh kosong.',
-                              );
-                              return;
-                            }
-
-                            if (selectedGender
-                                .isEmpty) {
-                              showError(
-                                'Jenis kelamin harus dipilih.',
-                              );
-                              return;
-                            }
-
-                            if (tempatLahirValue
-                                .isEmpty) {
-                              showError(
-                                'Tempat lahir tidak boleh kosong.',
-                              );
-                              return;
-                            }
-
-                            if (selectedDate
-                                .isEmpty) {
-                              showError(
-                                'Tanggal lahir harus dipilih.',
-                              );
-                              return;
-                            }
-
-                            // ==========================================
-                            // UPDATE
-                            // ==========================================
-
-                            final success =
                                 await updateProfile(
-                              namaBaru:
-                                  namaValue,
-                              emailBaru:
-                                  emailValue,
-                              phoneBaru:
-                                  phoneValue,
-                              genderBaru:
+                                  newName,
+                                  newPhone,
                                   selectedGender,
-                              tempatLahirBaru:
-                                  tempatLahirValue,
-                              tanggalLahirBaru:
-                                  selectedDate,
-                            );
-
-                            // ==========================================
-                            // TUTUP BOTTOM SHEET
-                            // ==========================================
-
-                            if (success &&
-                                sheetContext
-                                    .mounted) {
-                              Navigator.pop(
-                                sheetContext,
-                              );
-                            }
-                          },
-                          icon:
-                              const Icon(
-                            Icons
-                                .save_outlined,
-                            color:
-                                Colors.white,
+                                );
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
                           ),
-                          label:
-                              const Text(
-                            'Simpan Perubahan',
-                            style:
-                                TextStyle(
-                              color:
-                                  Colors.white,
-                              fontSize:
-                                  16,
-                              fontWeight:
-                                  FontWeight
-                                      .bold,
-                            ),
-                          ),
-                          style:
-                              ElevatedButton
-                                  .styleFrom(
-                            backgroundColor:
-                                primaryColor,
-                            elevation: 3,
-                            shape:
-                                RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius
-                                      .circular(
-                                15,
+                        ),
+                        child: isSaving
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                'Simpan Perubahan',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            ),
-                          ),
-                        ),
                       ),
-
-                      const SizedBox(
-                        height: 8,
-                      ),
-
-                      // =================================================
-                      // BATAL
-                      // =================================================
-
-                      SizedBox(
-                        width:
-                            double.infinity,
-                        height: 50,
-                        child:
-                            TextButton(
-                          onPressed: () {
-                            Navigator.pop(
-                              sheetContext,
-                            );
-                          },
-                          child:
-                              const Text(
-                            'Batal',
-                            style:
-                                TextStyle(
-                              color:
-                                  Colors.grey,
-                              fontSize:
-                                  15,
-                              fontWeight:
-                                  FontWeight
-                                      .w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -1485,84 +830,150 @@ class _ProfilePageState extends State<ProfilePage> {
         );
       },
     );
+
+    nameController.dispose();
+    phoneController.dispose();
   }
 
   // =========================================================
-  // FORMAT TANGGAL
+  // UPDATE PROFILE
   // =========================================================
 
-  String _formatDate(String date) {
+  Future<void> updateProfile(
+    String newName,
+    String newPhone,
+    String newGender,
+  ) async {
     try {
-      final parsed =
-          DateTime.parse(date);
+      if (mounted) {
+        setState(() {
+          isSaving = true;
+        });
+      }
 
-      final day = parsed.day
-          .toString()
-          .padLeft(2, '0');
+      final token = await getToken();
 
-      final month = parsed.month
-          .toString()
-          .padLeft(2, '0');
+      if (token == null || token.isEmpty) {
+        showMessage('Token tidak ditemukan.', Colors.red);
 
-      final year =
-          parsed.year.toString();
+        return;
+      }
 
-      return '$day-$month-$year';
-    } catch (_) {
-      return date;
+      print('======================================');
+      print('UPDATE PROFILE');
+      print('======================================');
+
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse(updateProfileUrl),
+      );
+
+      request.headers['Accept'] = 'application/json';
+
+      request.headers['Authorization'] = 'Bearer $token';
+
+      request.fields['name'] = newName;
+
+      request.fields['phone'] = newPhone;
+
+      if (newGender == 'Laki Laki') {
+        request.fields['gender'] = 'L';
+      } else if (newGender == 'Perempuan') {
+        request.fields['gender'] = 'P';
+      }
+
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 30),
+      );
+
+      final response = await http.Response.fromStream(streamedResponse);
+
+      print('======================================');
+      print('UPDATE STATUS: ${response.statusCode}');
+      print('UPDATE RESPONSE:');
+      print(response.body);
+      print('======================================');
+
+      dynamic result;
+
+      try {
+        result = jsonDecode(response.body);
+      } catch (_) {
+        result = {};
+      }
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (!mounted) return;
+
+        setState(() {
+          name = newName;
+          phone = newPhone;
+          gender = newGender;
+        });
+
+        // ===================================================
+        // UPDATE DATA LOCAL
+        // ===================================================
+
+        final prefs = await SharedPreferences.getInstance();
+
+        final oldUser = prefs.getString('user');
+
+        Map<String, dynamic> userMap = {};
+
+        if (oldUser != null && oldUser.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(oldUser);
+
+            if (decoded is Map) {
+              userMap = Map<String, dynamic>.from(decoded);
+            }
+          } catch (_) {}
+        }
+
+        userMap['name'] = newName;
+        userMap['phone'] = newPhone;
+
+        if (newGender == 'Laki Laki') {
+          userMap['gender'] = 'L';
+        } else if (newGender == 'Perempuan') {
+          userMap['gender'] = 'P';
+        }
+
+        if (photoName != null) {
+          userMap['photo'] = photoName;
+        }
+
+        await prefs.setString('user', jsonEncode(userMap));
+
+        showMessage('Profile berhasil diperbarui.', Colors.green);
+      } else {
+        String message = 'Gagal memperbarui profile.';
+
+        if (result is Map && result['message'] != null) {
+          message = result['message'].toString();
+        }
+
+        if (mounted) {
+          showMessage(message, Colors.red);
+        }
+      }
+    } catch (e) {
+      print('======================================');
+      print('ERROR UPDATE PROFILE');
+      print(e);
+      print('======================================');
+
+      if (mounted) {
+        showMessage('Tidak dapat terhubung ke server.', Colors.red);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isSaving = false;
+        });
+      }
     }
-  }
-
-  // =========================================================
-  // EDIT FIELD
-  // =========================================================
-
-  Widget _editField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    TextInputType? keyboardType,
-  }) {
-    return TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(
-          icon,
-          color: primaryColor,
-        ),
-        filled: true,
-        fillColor:
-            const Color(0xFFF8F8F8),
-        contentPadding:
-            const EdgeInsets.symmetric(
-          horizontal: 15,
-          vertical: 16,
-        ),
-        border: OutlineInputBorder(
-          borderRadius:
-              BorderRadius.circular(15),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder:
-            OutlineInputBorder(
-          borderRadius:
-              BorderRadius.circular(15),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder:
-            OutlineInputBorder(
-          borderRadius:
-              BorderRadius.circular(15),
-          borderSide:
-              const BorderSide(
-            color: primaryColor,
-            width: 1.5,
-          ),
-        ),
-      ),
-    );
   }
 
   // =========================================================
@@ -1570,89 +981,565 @@ class _ProfilePageState extends State<ProfilePage> {
   // =========================================================
 
   Future<void> logout() async {
-    final prefs =
-        await SharedPreferences.getInstance();
+    // =======================================================
+    // KONFIRMASI
+    // =======================================================
 
-    await prefs.remove('token');
-    await prefs.remove('user');
-
-    if (!mounted) return;
-
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      '/login',
-      (route) => false,
-    );
-  }
-
-  // =========================================================
-  // LOGOUT DIALOG
-  // =========================================================
-
-  void showLogoutDialog() {
-    showDialog(
+    final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          shape:
-              RoundedRectangleBorder(
-            borderRadius:
-                BorderRadius.circular(
-              20,
-            ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
           title: const Text(
-            'Logout',
-            style: TextStyle(
-              fontWeight:
-                  FontWeight.bold,
-            ),
+            'Konfirmasi Logout',
+            style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          content: const Text(
-            'Apakah kamu yakin ingin keluar?',
-          ),
+          content: const Text('Apakah Anda yakin ingin keluar dari akun?'),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                );
+                Navigator.pop(dialogContext, false);
               },
-              child: const Text(
-                'Batal',
-                style: TextStyle(
-                  color: Colors.grey,
-                ),
-              ),
+              child: const Text('Batal', style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                );
-
-                logout();
+                Navigator.pop(dialogContext, true);
               },
-              style:
-                  ElevatedButton.styleFrom(
-                backgroundColor:
-                    primaryColor,
-                foregroundColor:
-                    Colors.white,
-                shape:
-                    RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(
-                    10,
-                  ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              child:
-                  const Text('Logout'),
+              child: const Text('Keluar'),
             ),
           ],
         );
       },
+    );
+
+    // BATAL
+    if (result != true) {
+      return;
+    }
+
+    // =======================================================
+    // AMBIL TOKEN
+    // =======================================================
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      final token = prefs.getString('token');
+
+      print('======================================');
+      print('LOGOUT');
+      print('TOKEN LAMA: $token');
+      print('======================================');
+
+      // =====================================================
+      // REQUEST LOGOUT API
+      // =====================================================
+
+      if (token != null && token.isNotEmpty) {
+        try {
+          print('======================================');
+          print('REQUEST LOGOUT API');
+          print('URL: $logoutUrl');
+          print('======================================');
+
+          final response = await http
+              .post(
+                Uri.parse(logoutUrl),
+                headers: {
+                  'Accept': 'application/json',
+                  'Authorization': 'Bearer $token',
+                },
+              )
+              .timeout(const Duration(seconds: 30));
+
+          print('LOGOUT STATUS: ${response.statusCode}');
+
+          print('LOGOUT RESPONSE: ${response.body}');
+        } catch (e) {
+          print('ERROR LOGOUT API: $e');
+        }
+      }
+
+      // =====================================================
+      // HAPUS TOKEN
+      // =====================================================
+
+      await prefs.remove('token');
+
+      // =====================================================
+      // HAPUS USER
+      // =====================================================
+
+      await prefs.remove('user');
+
+      print('======================================');
+      print('LOGOUT SELESAI');
+      print('TOKEN DIHAPUS');
+      print('USER DIHAPUS');
+      print('======================================');
+
+      // =====================================================
+      // PINDAH KE LOGIN
+      // =====================================================
+
+      if (!mounted) {
+        return;
+      }
+
+      context.go(AppRoutes.login);
+    } catch (e) {
+      print('======================================');
+      print('ERROR LOGOUT');
+      print(e);
+      print('======================================');
+
+      // =====================================================
+      // KALAU TERJADI ERROR
+      // =====================================================
+
+      try {
+        final prefs = await SharedPreferences.getInstance();
+
+        await prefs.remove('token');
+        await prefs.remove('user');
+      } catch (_) {}
+
+      if (!mounted) {
+        return;
+      }
+
+      context.go(AppRoutes.login);
+    }
+  }
+
+  // =========================================================
+  // SNACKBAR
+  // =========================================================
+
+  void showMessage(String message, Color color) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: color,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(15),
+        ),
+      );
+  }
+
+  // =========================================================
+  // FOTO PROFILE
+  // =========================================================
+
+  Widget profileImageWidget() {
+    if (selectedPhoto != null) {
+      return CircleAvatar(
+        radius: 43,
+        backgroundImage: MemoryImage(selectedPhoto!),
+      );
+    }
+
+    if (profileImage != null) {
+      return CircleAvatar(
+        radius: 43,
+        backgroundImage: MemoryImage(profileImage!),
+      );
+    }
+
+    return const CircleAvatar(
+      radius: 43,
+      backgroundColor: Colors.white,
+      child: Icon(Icons.person_rounded, size: 45, color: primaryColor),
+    );
+  }
+
+  // =========================================================
+  // PROFILE INFO ITEM
+  // =========================================================
+
+  Widget profileInfoItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    bool isLast = false,
+  }) {
+    return Container(
+      margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F6F7),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          // ICON
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: primaryColor.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Icon(icon, color: primaryColor, size: 20),
+          ),
+
+          const SizedBox(width: 13),
+
+          // TEXT
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+
+                const SizedBox(height: 3),
+
+                Text(
+                  value,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================
+  // PROFILE CARD
+  // =========================================================
+
+  Widget profileCard() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // =================================================
+          // HEADER PROFILE
+          // =================================================
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 28, 20, 28),
+            decoration: const BoxDecoration(
+              color: primaryColor,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(24),
+                topRight: Radius.circular(24),
+              ),
+            ),
+            child: Column(
+              children: [
+                // FOTO
+                Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.15),
+                            blurRadius: 12,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: profileImageWidget(),
+                    ),
+
+                    // CAMERA
+                    GestureDetector(
+                      onTap: isUploadingPhoto ? null : pickPhoto,
+                      child: Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: primaryColor, width: 2),
+                        ),
+                        child: isUploadingPhoto
+                            ? const Padding(
+                                padding: EdgeInsets.all(7),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: primaryColor,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.camera_alt_rounded,
+                                size: 17,
+                                color: primaryColor,
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                // NAMA
+                Text(
+                  name,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+
+                const SizedBox(height: 5),
+
+                // USERNAME
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '@$username',
+                    style: const TextStyle(fontSize: 13, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // =================================================
+          // INFORMASI PROFILE
+          // =================================================
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // JUDUL
+                const Row(
+                  children: [
+                    Icon(
+                      Icons.person_outline_rounded,
+                      color: primaryColor,
+                      size: 21,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Informasi Pribadi',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                // USERNAME
+                profileInfoItem(
+                  icon: Icons.alternate_email_rounded,
+                  label: 'Username',
+                  value: username,
+                ),
+
+                // EMAIL
+                profileInfoItem(
+                  icon: Icons.email_outlined,
+                  label: 'Email',
+                  value: email,
+                ),
+
+                // NOMOR HP
+                profileInfoItem(
+                  icon: Icons.phone_outlined,
+                  label: 'Nomor HP',
+                  value: phone,
+                ),
+
+                // GENDER
+                profileInfoItem(
+                  icon: Icons.wc_outlined,
+                  label: 'Jenis Kelamin',
+                  value: gender,
+                ),
+
+                // TEMPAT LAHIR
+                profileInfoItem(
+                  icon: Icons.location_city_outlined,
+                  label: 'Tempat Lahir',
+                  value: birthPlace,
+                ),
+
+                // TANGGAL LAHIR
+                profileInfoItem(
+                  icon: Icons.calendar_month_outlined,
+                  label: 'Tanggal Lahir',
+                  value: birthDate,
+                  isLast: true,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================
+  // ACTION CARD
+  // =========================================================
+
+  Widget actionCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    bool isLogout = false,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isLogout
+              ? Colors.red.withOpacity(0.12)
+              : primaryColor.withOpacity(0.10),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                // =================================================
+                // ICON
+                // =================================================
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: isLogout
+                        ? Colors.red.withOpacity(0.09)
+                        : primaryColor.withOpacity(0.09),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: isLogout ? Colors.red : primaryColor,
+                    size: 23,
+                  ),
+                ),
+
+                const SizedBox(width: 14),
+
+                // =================================================
+                // TEXT
+                // =================================================
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: isLogout ? Colors.red : Colors.black87,
+                        ),
+                      ),
+
+                      const SizedBox(height: 4),
+
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // =================================================
+                // ARROW
+                // =================================================
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: isLogout
+                        ? Colors.red.withOpacity(0.06)
+                        : primaryColor.withOpacity(0.06),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 13,
+                    color: isLogout ? Colors.red : primaryColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1663,455 +1550,90 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:
-          const Color(0xFFF5F5F5),
+      backgroundColor: const Color(0xFFF5F5F5),
 
-      // =======================================================
+      // =====================================================
       // APP BAR
-      // =======================================================
-
+      // =====================================================
       appBar: AppBar(
-        backgroundColor:
-            primaryColor,
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        iconTheme:
-            const IconThemeData(
-          color: Colors.white,
-        ),
+
         title: const Text(
           'Profil',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight:
-                FontWeight.bold,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        actions: [
-          IconButton(
-            onPressed: editProfile,
-            icon: const Icon(
-              Icons.edit_outlined,
-              color: Colors.white,
-            ),
-          ),
-        ],
       ),
 
-      // =======================================================
+      // =====================================================
       // BODY
-      // =======================================================
+      // =====================================================
+      body: RefreshIndicator(
+        color: primaryColor,
+        onRefresh: getProfile,
 
-      body: isLoading
-          ? const Center(
-              child:
-                  CircularProgressIndicator(
-                color: primaryColor,
-              ),
-            )
-          : RefreshIndicator(
-              color: primaryColor,
-              onRefresh: loadProfile,
-              child:
-                  SingleChildScrollView(
-                physics:
-                    const AlwaysScrollableScrollPhysics(),
+        child: isLoading
+            ? const Center(
+                child: CircularProgressIndicator(color: primaryColor),
+              )
+            : SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+
+                padding: const EdgeInsets.all(18),
+
                 child: Column(
                   children: [
                     // =================================================
-                    // HEADER
+                    // PROFILE
                     // =================================================
+                    profileCard(),
 
-                    Container(
-                      width:
-                          double.infinity,
-                      padding:
-                          const EdgeInsets
-                              .only(
-                        bottom: 30,
-                      ),
-                      decoration:
-                          const BoxDecoration(
-                        color:
-                            primaryColor,
-                        borderRadius:
-                            BorderRadius.only(
-                          bottomLeft:
-                              Radius.circular(
-                            30,
-                          ),
-                          bottomRight:
-                              Radius.circular(
-                            30,
-                          ),
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          const SizedBox(
-                            height: 20,
-                          ),
-
-                          const CircleAvatar(
-                            radius: 50,
-                            backgroundColor:
-                                Colors.white,
-                            child: Icon(
-                              Icons.person,
-                              size: 60,
-                              color:
-                                  primaryColor,
-                            ),
-                          ),
-
-                          const SizedBox(
-                            height: 15,
-                          ),
-
-                          Text(
-                            nama,
-                            textAlign:
-                                TextAlign
-                                    .center,
-                            style:
-                                const TextStyle(
-                              color:
-                                  Colors.white,
-                              fontSize: 24,
-                              fontWeight:
-                                  FontWeight
-                                      .bold,
-                            ),
-                          ),
-
-                          const SizedBox(
-                            height: 5,
-                          ),
-
-                          const Text(
-                            'Survey Officer',
-                            style:
-                                TextStyle(
-                              color:
-                                  Colors.white70,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(
-                      height: 25,
-                    ),
+                    const SizedBox(height: 20),
 
                     // =================================================
-                    // TITLE
+                    // AKSI
                     // =================================================
-
-                    const Padding(
-                      padding:
-                          EdgeInsets
-                              .symmetric(
-                        horizontal: 20,
-                      ),
-                      child: Align(
-                        alignment:
-                            Alignment
-                                .centerLeft,
-                        child: Text(
-                          'Informasi Pribadi',
-                          style:
-                              TextStyle(
-                            fontSize: 21,
-                            fontWeight:
-                                FontWeight
-                                    .bold,
-                          ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Pengaturan',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade800,
                         ),
                       ),
                     ),
 
-                    const SizedBox(
-                      height: 15,
-                    ),
+                    const SizedBox(height: 12),
 
                     // =================================================
-                    // PROFILE CARD
+                    // EDIT PROFILE
                     // =================================================
-
-                    Padding(
-                      padding:
-                          const EdgeInsets
-                              .symmetric(
-                        horizontal: 20,
-                      ),
-                      child: Card(
-                        elevation: 5,
-                        shadowColor:
-                            Colors.black12,
-                        shape:
-                            RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius
-                                  .circular(
-                            20,
-                          ),
-                        ),
-                        child: Padding(
-                          padding:
-                              const EdgeInsets
-                                  .all(
-                            15,
-                          ),
-                          child: Column(
-                            children: [
-                              _profileItem(
-                                icon: Icons
-                                    .person,
-                                title: 'Nama',
-                                value: nama,
-                              ),
-
-                              const Divider(),
-
-                              _profileItem(
-                                icon: Icons
-                                    .email,
-                                title: 'Email',
-                                value: email,
-                              ),
-
-                              const Divider(),
-
-                              _profileItem(
-                                icon: Icons
-                                    .phone,
-                                title:
-                                    'Nomor HP',
-                                value: phone,
-                              ),
-
-                              const Divider(),
-
-                              _profileItem(
-                                icon: Icons
-                                    .people,
-                                title:
-                                    'Jenis Kelamin',
-                                value: gender ==
-                                        'L'
-                                    ? 'Laki-laki'
-                                    : gender ==
-                                            'P'
-                                        ? 'Perempuan'
-                                        : gender,
-                              ),
-
-                              const Divider(),
-
-                              _profileItem(
-                                icon: Icons
-                                    .location_city,
-                                title:
-                                    'Tempat Lahir',
-                                value:
-                                    tempatLahir,
-                              ),
-
-                              const Divider(),
-
-                              _profileItem(
-                                icon: Icons
-                                    .calendar_month,
-                                title:
-                                    'Tanggal Lahir',
-                                value:
-                                    tanggalLahir ==
-                                            '-'
-                                        ? '-'
-                                        : _formatDate(
-                                            tanggalLahir,
-                                          ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(
-                      height: 25,
-                    ),
-
-                    // =================================================
-                    // EDIT BUTTON
-                    // =================================================
-
-                    Padding(
-                      padding:
-                          const EdgeInsets
-                              .symmetric(
-                        horizontal: 20,
-                      ),
-                      child: SizedBox(
-                        width:
-                            double.infinity,
-                        height: 55,
-                        child:
-                            ElevatedButton
-                                .icon(
-                          onPressed:
-                              editProfile,
-                          icon:
-                              const Icon(
-                            Icons.edit,
-                            color:
-                                Colors.white,
-                          ),
-                          label:
-                              const Text(
-                            'Edit Profil',
-                            style:
-                                TextStyle(
-                              color:
-                                  Colors.white,
-                              fontSize: 16,
-                              fontWeight:
-                                  FontWeight
-                                      .bold,
-                            ),
-                          ),
-                          style:
-                              ElevatedButton
-                                  .styleFrom(
-                            backgroundColor:
-                                primaryColor,
-                            elevation: 5,
-                            shape:
-                                RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius
-                                      .circular(
-                                15,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(
-                      height: 20,
+                    actionCard(
+                      icon: Icons.edit_rounded,
+                      title: 'Edit Profile',
+                      subtitle: 'Perbarui data diri kamu',
+                      onTap: editProfile,
                     ),
 
                     // =================================================
                     // LOGOUT
                     // =================================================
-
-                    Padding(
-                      padding:
-                          const EdgeInsets
-                              .symmetric(
-                        horizontal: 20,
-                      ),
-                      child: SizedBox(
-                        width:
-                            double.infinity,
-                        height: 55,
-                        child:
-                            OutlinedButton
-                                .icon(
-                          onPressed:
-                              showLogoutDialog,
-                          icon:
-                              const Icon(
-                            Icons.logout,
-                            color:
-                                primaryColor,
-                          ),
-                          label:
-                              const Text(
-                            'Logout',
-                            style:
-                                TextStyle(
-                              color:
-                                  primaryColor,
-                              fontSize: 16,
-                              fontWeight:
-                                  FontWeight
-                                      .bold,
-                            ),
-                          ),
-                          style:
-                              OutlinedButton
-                                  .styleFrom(
-                            side:
-                                const BorderSide(
-                              color:
-                                  primaryColor,
-                              width: 1.5,
-                            ),
-                            shape:
-                                RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius
-                                      .circular(
-                                15,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                    actionCard(
+                      icon: Icons.logout_rounded,
+                      title: 'Keluar',
+                      subtitle: 'Logout dari akun',
+                      isLogout: true,
+                      onTap: logout,
                     ),
 
-                    const SizedBox(
-                      height: 30,
-                    ),
+                    const SizedBox(height: 10),
                   ],
                 ),
               ),
-            ),
-    );
-  }
-
-  // =========================================================
-  // PROFILE ITEM
-  // =========================================================
-
-  Widget _profileItem({
-    required IconData icon,
-    required String title,
-    required String value,
-  }) {
-    return ListTile(
-      contentPadding:
-          const EdgeInsets.symmetric(
-        horizontal: 5,
-        vertical: 3,
-      ),
-      leading: CircleAvatar(
-        backgroundColor:
-            const Color(0xFFF7E7EB),
-        child: Icon(
-          icon,
-          color: primaryColor,
-        ),
-      ),
-      title: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.grey,
-          fontSize: 13,
-        ),
-      ),
-      subtitle: Text(
-        value,
-        style: const TextStyle(
-          color: Colors.black87,
-          fontSize: 16,
-          fontWeight:
-              FontWeight.w600,
-        ),
       ),
     );
   }
