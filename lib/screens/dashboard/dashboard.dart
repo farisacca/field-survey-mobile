@@ -1,11 +1,81 @@
+import 'dart:convert';
+
 import 'package:field_survey/screens/survey/survey.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 
 import 'package:field_survey/routes/app_routes.dart';
 
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
+
+  Future<String> _getNamaPengguna() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Data user disimpan oleh LoginPage dengan key 'user'
+    final userJson = prefs.getString('user');
+
+    if (userJson == null || userJson.isEmpty) {
+      return 'Pengguna';
+    }
+
+    try {
+      final dynamic decoded = jsonDecode(userJson);
+
+      if (decoded is Map) {
+        // Jika data user langsung berisi nama
+        final nama = _cariNama(decoded);
+
+        if (nama != null && nama.isNotEmpty) {
+          return nama;
+        }
+
+        // Jika data user memiliki struktur bersarang
+        for (final key in ['data', 'user', 'profile']) {
+          final nested = decoded[key];
+
+          if (nested is Map) {
+            final nestedName = _cariNama(nested);
+
+            if (nestedName != null && nestedName.isNotEmpty) {
+              return nestedName;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Gagal membaca data user: $e');
+    }
+
+    return 'Pengguna';
+  }
+
+  // =========================================================
+  // CARI FIELD NAMA
+  // =========================================================
+  String? _cariNama(Map data) {
+    const kemungkinanNama = [
+      'name',
+      'nama',
+      'nama_user',
+      'nama_pengguna',
+      'full_name',
+      'fullname',
+      'username',
+    ];
+
+    for (final key in kemungkinanNama) {
+      final value = data[key];
+
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return value.toString().trim();
+      }
+    }
+
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,13 +97,14 @@ class DashboardPage extends StatelessWidget {
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 35),
-                decoration: const BoxDecoration(color: primaryColor),
-
+                decoration: const BoxDecoration(
+                  color: primaryColor,
+                ),
                 child: Column(
                   children: [
                     Row(
                       children: [
-                        // FOTO PROFILE
+                        // FOTO PROFIL
                         const CircleAvatar(
                           radius: 28,
                           backgroundColor: Colors.white,
@@ -46,35 +117,52 @@ class DashboardPage extends StatelessWidget {
 
                         const SizedBox(width: 15),
 
-                        // NAMA
-                        const Expanded(
+                        // NAMA PENGGUNA SESUAI AKUN LOGIN
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                "Welcome 👋",
+                              const Text(
+                                'Selamat Datang!',
                                 style: TextStyle(
                                   color: Colors.white70,
                                   fontSize: 15,
                                 ),
                               ),
 
-                              SizedBox(height: 4),
+                              const SizedBox(height: 4),
 
-                              Text(
-                                "Farisa",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                              FutureBuilder<String>(
+                                future: _getNamaPengguna(),
+                                builder: (context, snapshot) {
+                                  final nama = snapshot.data;
+
+                                  return Text(
+                                    snapshot.connectionState ==
+                                            ConnectionState.waiting
+                                        ? 'Memuat...'
+                                        : (nama == null ||
+                                                nama.isEmpty
+                                            ? 'Pengguna'
+                                            : nama),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  );
+                                },
                               ),
 
-                              SizedBox(height: 4),
+                              const SizedBox(height: 4),
 
-                              Text(
-                                "Survey Officer",
-                                style: TextStyle(color: Colors.white70),
+                              const Text(
+                                'Survey Officer',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                ),
                               ),
                             ],
                           ),
@@ -86,10 +174,8 @@ class DashboardPage extends StatelessWidget {
                             color: Colors.white24,
                             borderRadius: BorderRadius.circular(15),
                           ),
-
                           child: IconButton(
                             onPressed: () {},
-
                             icon: const Icon(
                               Icons.notifications_none,
                               color: Colors.white,
@@ -100,13 +186,14 @@ class DashboardPage extends StatelessWidget {
                     ),
 
                     const SizedBox(height: 18),
-
-                    const Align(
+                      Align(
                       alignment: Alignment.centerLeft,
-
                       child: Text(
-                        "Wednesday, 29 July 2026",
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                        DateFormat('EEEE, dd MMMM yyyy', 'en_US').format(DateTime.now()),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                        ),
                       ),
                     ),
                   ],
@@ -120,29 +207,22 @@ class DashboardPage extends StatelessWidget {
               // =================================================
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-
                 child: Card(
                   elevation: 6,
                   shadowColor: Colors.black26,
-
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(22),
                   ),
-
                   child: Padding(
                     padding: const EdgeInsets.all(22),
-
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-
                       children: [
                         const Row(
                           children: [
                             CircleAvatar(
                               radius: 20,
-
                               backgroundColor: Color(0xFFF7E7EB),
-
                               child: Icon(
                                 Icons.assignment_outlined,
                                 color: primaryColor,
@@ -153,7 +233,6 @@ class DashboardPage extends StatelessWidget {
 
                             Text(
                               "Today's Survey",
-
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -165,8 +244,7 @@ class DashboardPage extends StatelessWidget {
                         const SizedBox(height: 25),
 
                         const Text(
-                          "12 Survey Completed",
-
+                          '12 Survey Completed',
                           style: TextStyle(
                             fontSize: 26,
                             fontWeight: FontWeight.bold,
@@ -178,7 +256,6 @@ class DashboardPage extends StatelessWidget {
 
                         ClipRRect(
                           borderRadius: BorderRadius.circular(20),
-
                           child: const LinearProgressIndicator(
                             value: 0.85,
                             minHeight: 10,
@@ -191,10 +268,8 @@ class DashboardPage extends StatelessWidget {
 
                         const Align(
                           alignment: Alignment.centerRight,
-
                           child: Text(
-                            "85%",
-
+                            '85%',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: primaryColor,
@@ -214,13 +289,12 @@ class DashboardPage extends StatelessWidget {
               // =================================================
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-
                 child: Row(
                   children: [
                     Expanded(
                       child: statCard(
-                        "Survey Hari Ini",
-                        "12",
+                        'Survey Hari Ini',
+                        '12',
                         Icons.assignment_outlined,
                       ),
                     ),
@@ -229,8 +303,8 @@ class DashboardPage extends StatelessWidget {
 
                     Expanded(
                       child: statCard(
-                        "Total Survey",
-                        "48",
+                        'Total Survey',
+                        '48',
                         Icons.analytics_outlined,
                       ),
                     ),
@@ -245,14 +319,14 @@ class DashboardPage extends StatelessWidget {
               // =================================================
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20),
-
                 child: Align(
                   alignment: Alignment.centerLeft,
-
                   child: Text(
-                    "Menu Utama",
-
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                    'Menu Utama',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -261,66 +335,49 @@ class DashboardPage extends StatelessWidget {
 
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-
                 child: GridView.count(
                   shrinkWrap: true,
-
                   physics: const NeverScrollableScrollPhysics(),
-
                   crossAxisCount: 3,
-
                   crossAxisSpacing: 15,
-
                   mainAxisSpacing: 15,
-
                   childAspectRatio: 0.9,
-
                   children: [
-                    // =================================================
-                    // SURVEY
-                    // =================================================
                     menuCard(
                       context,
                       Icons.assignment_outlined,
-                      "Survey",
+                      'Survey',
                       const SurveyPage(),
                     ),
 
-                    // =================================================
-                    // LOKASI
-                    // =================================================
                     menuCard(
                       context,
                       Icons.location_on_outlined,
-                      "Lokasi",
+                      'Lokasi',
                       null,
                     ),
 
-                    // =================================================
-                    // LAPORAN
-                    // =================================================
                     menuCard(
                       context,
                       Icons.bar_chart_outlined,
-                      "Laporan",
+                      'Laporan',
                       null,
                     ),
 
-                    // =================================================
-                    // PROFIL
-                    // =================================================
                     menuCard(
                       context,
                       Icons.person_outline,
-                      "Profil",
+                      'Profil',
                       null,
                       route: AppRoutes.profil,
                     ),
 
-                    // =================================================
-                    // RIWAYAT
-                    // =================================================
-                    menuCard(context, Icons.history, "Riwayat", null),
+                    menuCard(
+                      context,
+                      Icons.history,
+                      'Riwayat',
+                      null,
+                    ),
                   ],
                 ),
               ),
@@ -332,14 +389,14 @@ class DashboardPage extends StatelessWidget {
               // =================================================
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20),
-
                 child: Align(
                   alignment: Alignment.centerLeft,
-
                   child: Text(
-                    "Aktivitas Terbaru",
-
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                    'Aktivitas Terbaru',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -349,15 +406,15 @@ class DashboardPage extends StatelessWidget {
               activityCard(
                 Icons.check_circle,
                 Colors.green,
-                "Survey berhasil dikirim",
-                "Hari ini • 09.30 WIB",
+                'Survey berhasil dikirim',
+                'Hari ini • 09.30 WIB',
               ),
 
               activityCard(
                 Icons.description_outlined,
                 Colors.orange,
-                "Laporan bulan Juli tersedia",
-                "Hari ini • 13.00 WIB",
+                'Laporan bulan Juli tersedia',
+                'Hari ini • 13.00 WIB',
               ),
 
               const SizedBox(height: 25),
@@ -371,29 +428,19 @@ class DashboardPage extends StatelessWidget {
       // =====================================================
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: 0,
-
         selectedItemColor: primaryColor,
-
         unselectedItemColor: Colors.grey,
-
         type: BottomNavigationBarType.fixed,
-
         elevation: 8,
 
         onTap: (index) {
-          // ================= HOME =================
-
           if (index == 0) {
             context.go(AppRoutes.dashboard);
           }
 
-          // ================= SURVEY =================
-
           if (index == 1) {
             context.go('/survey');
           }
-
-          // ================= PROFIL =================
 
           if (index == 2) {
             context.go(AppRoutes.profil);
@@ -403,26 +450,20 @@ class DashboardPage extends StatelessWidget {
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
-
             activeIcon: Icon(Icons.home),
-
-            label: "Home",
+            label: 'Home',
           ),
 
           BottomNavigationBarItem(
             icon: Icon(Icons.assignment_outlined),
-
             activeIcon: Icon(Icons.assignment),
-
-            label: "Survey",
+            label: 'Survey',
           ),
 
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
-
             activeIcon: Icon(Icons.person),
-
-            label: "Profil",
+            label: 'Profil',
           ),
         ],
       ),
@@ -433,35 +474,32 @@ class DashboardPage extends StatelessWidget {
 // =========================================================
 // STAT CARD
 // =========================================================
-
 Widget statCard(String title, String value, IconData icon) {
   const Color primaryColor = Color(0xFF7B1E3A);
 
   return Card(
     elevation: 4,
-
     shadowColor: Colors.black12,
-
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(18),
+    ),
     child: Padding(
       padding: const EdgeInsets.all(18),
-
       child: Column(
         children: [
           CircleAvatar(
             radius: 20,
-
             backgroundColor: const Color(0xFFF7E7EB),
-
-            child: Icon(icon, color: primaryColor),
+            child: Icon(
+              icon,
+              color: primaryColor,
+            ),
           ),
 
           const SizedBox(height: 12),
 
           Text(
             value,
-
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -473,10 +511,11 @@ Widget statCard(String title, String value, IconData icon) {
 
           Text(
             title,
-
             textAlign: TextAlign.center,
-
-            style: const TextStyle(color: Colors.grey, fontSize: 13),
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 13,
+            ),
           ),
         ],
       ),
@@ -487,7 +526,6 @@ Widget statCard(String title, String value, IconData icon) {
 // =========================================================
 // MENU CARD
 // =========================================================
-
 Widget menuCard(
   BuildContext context,
   IconData icon,
@@ -499,58 +537,56 @@ Widget menuCard(
 
   return Card(
     elevation: 4,
-
     shadowColor: Colors.black12,
-
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(18),
+    ),
     child: InkWell(
       borderRadius: BorderRadius.circular(18),
 
       onTap: () {
-        // =================================================
-        // JIKA ADA ROUTE
-        // =================================================
-
         if (route != null) {
           context.go(route);
           return;
         }
 
-        // =================================================
-        // JIKA BELUM ADA HALAMAN
-        // =================================================
-
         if (page == null) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text("$title belum tersedia")));
-
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$title belum tersedia'),
+            ),
+          );
           return;
         }
 
-        // =================================================
-        // HALAMAN YANG MASIH PAKAI NAVIGATOR
-        // =================================================
-
-        Navigator.push(context, MaterialPageRoute(builder: (context) => page));
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => page,
+          ),
+        );
       },
 
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-
         children: [
           CircleAvatar(
             radius: 22,
-
             backgroundColor: const Color(0xFFF7E7EB),
-
-            child: Icon(icon, color: primaryColor),
+            child: Icon(
+              icon,
+              color: primaryColor,
+            ),
           ),
 
           const SizedBox(height: 12),
 
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     ),
@@ -560,29 +596,44 @@ Widget menuCard(
 // =========================================================
 // ACTIVITY CARD
 // =========================================================
-
-Widget activityCard(IconData icon, Color color, String title, String subtitle) {
+Widget activityCard(
+  IconData icon,
+  Color color,
+  String title,
+  String subtitle,
+) {
   return Card(
-    margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-
+    margin: const EdgeInsets.symmetric(
+      horizontal: 20,
+      vertical: 6,
+    ),
     elevation: 3,
-
     shadowColor: Colors.black12,
-
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(18),
+    ),
     child: ListTile(
       leading: CircleAvatar(
         backgroundColor: color.withValues(alpha: 0.15),
-
-        child: Icon(icon, color: color),
+        child: Icon(
+          icon,
+          color: color,
+        ),
       ),
 
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      title: Text(
+        title,
+        style: const TextStyle(
+          fontWeight: FontWeight.w600,
+        ),
+      ),
 
       subtitle: Text(subtitle),
 
-      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+      trailing: const Icon(
+        Icons.arrow_forward_ios,
+        size: 16,
+      ),
     ),
   );
 }

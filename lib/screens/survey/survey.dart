@@ -5,7 +5,7 @@ import 'package:field_survey/screens/survey/survey_detail_page.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:go_router/go_router.dart';
 import 'package:field_survey/routes/app_routes.dart';
 import 'package:field_survey/screens/auth/login.dart';
 
@@ -223,24 +223,42 @@ class _SurveyPageState extends State<SurveyPage> {
       // =====================================================
       // APP BAR
       // =====================================================
+       
       appBar: AppBar(
         backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
         elevation: 0,
+        centerTitle: true,
+
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          tooltip: 'Kembali ke Dashboard',
+          onPressed: () {
+            context.go(AppRoutes.dashboard);
+          },
+        ),
+
 
         title: const Text(
           'Survey',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
-
-        centerTitle: false,
 
         actions: [
           IconButton(
             onPressed: fetchSurveys,
-            icon: const Icon(Icons.refresh, color: Colors.white),
+            tooltip: 'Refresh Survey',
+            icon: const Icon(
+              Icons.refresh,
+              color: Colors.white,
+            ),
           ),
         ],
       ),
+
 
       // =====================================================
       // BODY

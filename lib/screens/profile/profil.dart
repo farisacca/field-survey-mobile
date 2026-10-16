@@ -1555,16 +1555,38 @@ class _ProfilePageState extends State<ProfilePage> {
       // =====================================================
       // APP BAR
       // =====================================================
+      
       appBar: AppBar(
         backgroundColor: primaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
 
+        // Tombol kembali ke Dashboard
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          tooltip: 'Kembali ke Dashboard',
+          onPressed: () {
+            context.go(AppRoutes.dashboard);
+          },
+        ),
+
+        // Judul tetap di tengah
         title: const Text(
           'Profil',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
         ),
+
+        // Tombol refresh di sebelah kanan
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh Profil',
+            onPressed: getProfile,
+          ),
+        ],
       ),
 
       // =====================================================
