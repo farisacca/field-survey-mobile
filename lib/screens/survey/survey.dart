@@ -1,11 +1,12 @@
+
 import 'dart:convert';
 
 import 'package:field_survey/screens/survey/SurveyFormPage.dart';
 import 'package:field_survey/screens/survey/survey_detail_page.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:go_router/go_router.dart';
 import 'package:field_survey/routes/app_routes.dart';
 import 'package:field_survey/screens/auth/login.dart';
 
@@ -17,65 +18,50 @@ class SurveyPage extends StatefulWidget {
 }
 
 class _SurveyPageState extends State<SurveyPage> {
-  // =========================================================
-  // 1. STATE & VARIABLE HALAMAN
-  // =========================================================
+  static const Color primaryColor = Color(0xFF1976D2);
+  static const Color lightBlue = Color(0xFFE3F0FF);
+  static const Color backgroundColor = Color(0xFFF5F9FF);
+  static const Color borderColor = Color(0xFFDCE6F1);
+  static const Color textColor = Color(0xFF172033);
+  static const Color greyColor = Color(0xFF64748B);
 
-  // Menyimpan data survey yang berhasil diambil dari API
   List<Map<String, dynamic>> surveys = [];
 
-  // Menandakan sedang loading saat mengambil data dari server
   bool isLoading = true;
-
-  // Menyimpan pesan error jika gagal terhubung ke server
   String? errorMessage;
 
-  // Endpoint API untuk mengambil daftar survey
   final String apiUrl = 'https://sijala.biz.id/api/v1/surveys';
-
-  // Warna utama aplikasi
-  static const Color primaryColor = Color(0xFF7B1E3A);
-
-  // =========================================================
-  // 2. LIFECYCLE
-  // =========================================================
 
   @override
   void initState() {
     super.initState();
-
-    // Ambil data survey ketika halaman pertama dibuka
     fetchSurveys();
   }
 
-  // =========================================================
-  // 3. REST API - MENGAMBIL DAFTAR SURVEY
-  // =========================================================
-
+  
   Future<void> fetchSurveys() async {
+    if (!mounted) return;
+
     setState(() {
       isLoading = true;
       errorMessage = null;
     });
 
     try {
-      // Mengambil token dari SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
 
-      // Jika token kosong, pengguna harus login kembali
       if (token.isEmpty) {
         if (!mounted) return;
 
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => const LoginPage()),
+          (route) => false,
         );
-
         return;
       }
 
-      // Request GET ke API
       final response = await http.get(
         Uri.parse(apiUrl),
         headers: {
@@ -84,28 +70,27 @@ class _SurveyPageState extends State<SurveyPage> {
         },
       );
 
-      // Jika token sudah tidak valid / expired
       if (response.statusCode == 401) {
         await prefs.remove('token');
         await prefs.remove('user');
 
         if (!mounted) return;
 
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => const LoginPage()),
+          (route) => false,
         );
-
         return;
       }
 
-      // Jika request berhasil
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
 
-        // Mengecek status dari API
         if (data['status'] == true && data['data'] is List) {
           final List<dynamic> listData = data['data'];
+
+          if (!mounted) return;
 
           setState(() {
             surveys = listData
@@ -120,7 +105,8 @@ class _SurveyPageState extends State<SurveyPage> {
           return;
         }
 
-        // Jika data kosong
+        if (!mounted) return;
+
         setState(() {
           surveys = [];
           isLoading = false;
@@ -129,72 +115,71 @@ class _SurveyPageState extends State<SurveyPage> {
         return;
       }
 
-      // Jika response bukan 200
+      if (!mounted) return;
+
       setState(() {
         isLoading = false;
         errorMessage = 'Gagal mengambil data survey.';
       });
     } catch (e) {
+      debugPrint('ERROR FETCH SURVEY: $e');
+
+      if (!mounted) return;
+
       setState(() {
         isLoading = false;
-        errorMessage = 'Tidak dapat terhubung ke server. Periksa koneksi Anda.';
+        errorMessage =
+            'Tidak dapat terhubung ke server. Periksa koneksi Anda.';
       });
     }
   }
 
-  // =========================================================
-  // 4. NAVIGASI DETAIL SURVEY
-  // =========================================================
-
+  // DETAIL SURVEY
   Future<void> openSurveyDetail(Map<String, dynamic> survey) async {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SurveyDetailPage(surveyId: survey['id']),
+        builder: (context) => SurveyDetailPage(
+          surveyId: survey['id'],
+        ),
       ),
     );
 
-    // Jika kembali dari halaman detail
-    // dan ada perubahan data survey
     if (result == true && mounted) {
       fetchSurveys();
     }
   }
 
-  // =========================================================
-  // 5. NAVIGASI FORM TAMBAH SURVEY
-  // =========================================================
-
+  // TAMBAH SURVEY
   Future<void> openSurveyForm() async {
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const SurveyFormPage()),
+      MaterialPageRoute(
+        builder: (context) => const SurveyFormPage(),
+      ),
     );
 
-    // Jika berhasil menambahkan survey,
-    // ambil ulang data dari API
     if (result == true && mounted) {
       fetchSurveys();
     }
   }
 
-  // =========================================================
-  // 6. HELPER FORMAT DATA
-  // =========================================================
-
+  // KATEGORI SURVEY
   String getSurveyCategory(Map<String, dynamic> survey) {
     if (survey['category'] != null &&
         survey['category'].toString().isNotEmpty) {
       return survey['category'].toString();
     }
 
-    if (survey['survey'] is Map && survey['survey']['category'] != null) {
+    if (survey['survey'] is Map &&
+        survey['survey']['category'] != null) {
       return survey['survey']['category'].toString();
     }
 
     return 'Tipe Survey';
   }
 
+  // FORMAT TANGGAL
   String formatDate(dynamic date) {
     if (date == null || date.toString().isEmpty) {
       return '-';
@@ -211,19 +196,12 @@ class _SurveyPageState extends State<SurveyPage> {
     }
   }
 
-  // =========================================================
-  // 7. BUILD TAMPILAN
-  // =========================================================
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F8F8),
+      backgroundColor: backgroundColor,
 
-      // =====================================================
       // APP BAR
-      // =====================================================
-       
       appBar: AppBar(
         backgroundColor: primaryColor,
         foregroundColor: Colors.white,
@@ -238,7 +216,6 @@ class _SurveyPageState extends State<SurveyPage> {
           },
         ),
 
-
         title: const Text(
           'Survey',
           style: TextStyle(
@@ -247,66 +224,72 @@ class _SurveyPageState extends State<SurveyPage> {
           ),
         ),
 
-        actions: [
-          IconButton(
-            onPressed: fetchSurveys,
-            tooltip: 'Refresh Survey',
-            icon: const Icon(
-              Icons.refresh,
-              color: Colors.white,
-            ),
-          ),
-        ],
+        // Tombol refresh sengaja dihilangkan.
       ),
 
-
-      // =====================================================
       // BODY
-      // =====================================================
       body: RefreshIndicator(
         color: primaryColor,
-
+        backgroundColor: Colors.white,
         onRefresh: fetchSurveys,
-
-        child: isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: primaryColor),
-              )
-            : errorMessage != null
-            ? _buildErrorState()
-            : surveys.isEmpty
-            ? _buildEmptyState()
-            : _buildSurveyList(),
+        child: _buildBody(),
       ),
 
-      // =====================================================
-      // FLOATING ACTION BUTTON
-      // =====================================================
+      // TOMBOL TAMBAH
       floatingActionButton: FloatingActionButton.extended(
         onPressed: openSurveyForm,
-
         backgroundColor: primaryColor,
-
-        icon: const Icon(Icons.add, color: Colors.white),
-
+        foregroundColor: Colors.white,
+        elevation: 3,
+        icon: const Icon(Icons.add),
         label: const Text(
           'Tambah Survey',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
     );
   }
 
-  // =========================================================
-  // 8. TAMPILAN LIST SURVEY
-  // =========================================================
+  // ISI BODY
+  Widget _buildBody() {
+    if (isLoading) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [
+          SizedBox(height: 220),
+          Center(
+            child: CircularProgressIndicator(
+              color: primaryColor,
+            ),
+          ),
+          SizedBox(height: 16),
+          Center(
+            child: Text(
+              'Memuat data survey...',
+              style: TextStyle(color: greyColor),
+            ),
+          ),
+        ],
+      );
+    }
 
+    if (errorMessage != null) {
+      return _buildErrorState();
+    }
+
+    if (surveys.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    return _buildSurveyList();
+  }
+
+  // DAFTAR SURVEY
   Widget _buildSurveyList() {
     return ListView.builder(
-      padding: const EdgeInsets.all(20),
-
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 100),
       itemCount: surveys.length,
-
       itemBuilder: (context, index) {
         final survey = surveys[index];
 
@@ -315,7 +298,8 @@ class _SurveyPageState extends State<SurveyPage> {
             survey['name']?.toString() ??
             'Survey';
 
-        final String description = survey['description']?.toString() ?? '';
+        final String description =
+            survey['description']?.toString() ?? '';
 
         final String category = getSurveyCategory(survey);
 
@@ -323,86 +307,82 @@ class _SurveyPageState extends State<SurveyPage> {
           survey['created_at'] ?? survey['createdAt'],
         );
 
-        return GestureDetector(
-          onTap: () {
-            openSurveyDetail(survey);
-          },
-
-          child: Card(
-            elevation: 4,
-
-            shadowColor: Colors.black12,
-
-            margin: const EdgeInsets.only(bottom: 15),
-
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-
+        return Card(
+          elevation: 0,
+          margin: const EdgeInsets.only(bottom: 14),
+          color: Colors.white,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: borderColor),
+          ),
+          child: InkWell(
+            onTap: () => openSurveyDetail(survey),
             child: Padding(
-              padding: const EdgeInsets.all(18),
-
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-
                 children: [
-                  // =================================================
-                  // HEADER CARD
-                  // =================================================
+                  // HEADER
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      CircleAvatar(
-                        radius: 24,
-
-                        backgroundColor: const Color(0xFFF7E7EB),
-
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: lightBlue,
+                          borderRadius: BorderRadius.circular(13),
+                        ),
                         child: const Icon(
                           Icons.assignment_outlined,
                           color: primaryColor,
+                          size: 25,
                         ),
                       ),
 
-                      const SizedBox(width: 14),
+                      const SizedBox(width: 13),
 
                       Expanded(
-                        child: Text(
-                          title,
-
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Text(
+                            title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
                           ),
                         ),
                       ),
 
+                      const SizedBox(width: 8),
+
                       const Icon(
-                        Icons.arrow_forward_ios,
+                        Icons.arrow_forward_ios_rounded,
                         size: 16,
-                        color: Colors.grey,
+                        color: primaryColor,
                       ),
                     ],
                   ),
 
                   const SizedBox(height: 15),
 
-                  // =================================================
-                  // CATEGORY
-                  // =================================================
+                  // KATEGORI
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
+                      horizontal: 11,
                       vertical: 6,
                     ),
-
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF7E7EB),
-
-                      borderRadius: BorderRadius.circular(20),
+                      color: lightBlue,
+                      borderRadius: BorderRadius.circular(8),
                     ),
-
                     child: Text(
                       category,
-
                       style: const TextStyle(
                         color: primaryColor,
                         fontWeight: FontWeight.w600,
@@ -411,43 +391,59 @@ class _SurveyPageState extends State<SurveyPage> {
                     ),
                   ),
 
-                  const SizedBox(height: 12),
-
-                  // =================================================
-                  // DESCRIPTION
-                  // =================================================
-                  if (description.isNotEmpty)
+                  // DESKRIPSI
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: 12),
                     Text(
                       description,
-
                       maxLines: 2,
-
                       overflow: TextOverflow.ellipsis,
-
-                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                      style: const TextStyle(
+                        color: greyColor,
+                        fontSize: 13,
+                        height: 1.5,
+                      ),
                     ),
+                  ],
 
+                  const SizedBox(height: 14),
+                  const Divider(height: 1, color: borderColor),
                   const SizedBox(height: 12),
 
-                  // =================================================
-                  // DATE
-                  // =================================================
+                  // TANGGAL
                   Row(
                     children: [
-                      const Icon(
-                        Icons.calendar_today,
-                        size: 14,
-                        color: primaryColor,
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: backgroundColor,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.calendar_today_outlined,
+                          size: 15,
+                          color: primaryColor,
+                        ),
                       ),
 
-                      const SizedBox(width: 7),
+                      const SizedBox(width: 9),
+
+                      const Text(
+                        'Dibuat pada',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: greyColor,
+                        ),
+                      ),
+
+                      const Spacer(),
 
                       Text(
                         date,
-
                         style: const TextStyle(
-                          color: Colors.grey,
                           fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: textColor,
                         ),
                       ),
                     ],
@@ -461,152 +457,139 @@ class _SurveyPageState extends State<SurveyPage> {
     );
   }
 
-  // =========================================================
-  // 9. KONDISI ERROR
-  // =========================================================
-
+  // KONDISI ERROR
   Widget _buildErrorState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(25),
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(25),
+      children: [
+        const SizedBox(height: 120),
 
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-
-              decoration: BoxDecoration(
-                color: const Color(0xFFF7E7EB),
-
-                shape: BoxShape.circle,
-              ),
-
-              child: const Icon(Icons.wifi_off, size: 45, color: primaryColor),
+        Center(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: const BoxDecoration(
+              color: lightBlue,
+              shape: BoxShape.circle,
             ),
-
-            const SizedBox(height: 20),
-
-            const Text(
-              'Gagal Memuat Data',
-
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            child: const Icon(
+              Icons.wifi_off_rounded,
+              size: 45,
+              color: primaryColor,
             ),
-
-            const SizedBox(height: 10),
-
-            Text(
-              errorMessage ?? 'Terjadi kesalahan.',
-              textAlign: TextAlign.center,
-
-              style: const TextStyle(color: Colors.grey),
-            ),
-
-            const SizedBox(height: 25),
-
-            ElevatedButton.icon(
-              onPressed: fetchSurveys,
-
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryColor,
-
-                foregroundColor: Colors.white,
-
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 22,
-                  vertical: 13,
-                ),
-
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-
-              icon: const Icon(Icons.refresh),
-
-              label: const Text('Coba Lagi'),
-            ),
-          ],
+          ),
         ),
-      ),
+
+        const SizedBox(height: 20),
+
+        const Center(
+          child: Text(
+            'Gagal Memuat Data',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: textColor,
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        Text(
+          errorMessage ?? 'Terjadi kesalahan.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: greyColor,
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        const Text(
+          'Tarik layar ke bawah untuk mencoba kembali.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: primaryColor,
+            fontSize: 13,
+          ),
+        ),
+      ],
     );
   }
 
-  // =========================================================
-  // 10. KONDISI DATA KOSONG
-  // =========================================================
-
+  // KONDISI DATA KOSONG
   Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(25),
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(25),
+      children: [
+        const SizedBox(height: 100),
 
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-
-              decoration: BoxDecoration(
-                color: const Color(0xFFF7E7EB),
-
-                shape: BoxShape.circle,
-              ),
-
-              child: const Icon(
-                Icons.assignment_outlined,
-                size: 50,
-                color: primaryColor,
-              ),
+        Center(
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: const BoxDecoration(
+              color: lightBlue,
+              shape: BoxShape.circle,
             ),
-
-            const SizedBox(height: 20),
-
-            const Text(
-              'Belum Ada Data Survey',
-
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            child: const Icon(
+              Icons.assignment_outlined,
+              size: 50,
+              color: primaryColor,
             ),
-
-            const SizedBox(height: 10),
-
-            const Text(
-              'Belum ada survey yang tersedia saat ini.',
-
-              textAlign: TextAlign.center,
-
-              style: TextStyle(color: Colors.grey),
-            ),
-
-            const SizedBox(height: 25),
-
-            ElevatedButton.icon(
-              onPressed: openSurveyForm,
-
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryColor,
-
-                foregroundColor: Colors.white,
-
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 22,
-                  vertical: 13,
-                ),
-
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-
-              icon: const Icon(Icons.add),
-
-              label: const Text('Tambah Survey'),
-            ),
-          ],
+          ),
         ),
-      ),
+
+        const SizedBox(height: 20),
+
+        const Center(
+          child: Text(
+            'Belum Ada Data Survey',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.bold,
+              color: textColor,
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        const Text(
+          'Belum ada survey yang tersedia saat ini. '
+          'Silakan tambahkan survey baru.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: greyColor,
+            fontSize: 13,
+            height: 1.5,
+          ),
+        ),
+
+        const SizedBox(height: 22),
+
+        Center(
+          child: ElevatedButton.icon(
+            onPressed: openSurveyForm,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 13,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            icon: const Icon(Icons.add),
+            label: const Text('Tambah Survey'),
+          ),
+        ),
+      ],
     );
   }
 }

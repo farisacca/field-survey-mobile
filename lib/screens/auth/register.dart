@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -12,7 +13,9 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
-  static const Color primaryColor = Color(0xFF7B1E3A);
+  static const Color primaryColor = Color(0xFF1976D2);
+  static const Color backgroundColor = Color(0xFFF5F9FF);
+  static const Color lightBlue = Color(0xFFE3F0FF);
 
   final _formKey = GlobalKey<FormState>();
 
@@ -21,14 +24,9 @@ class _RegisterPageState extends State<RegisterPage> {
   final phoneController = TextEditingController();
 
   String? gender;
-
   bool isLoading = false;
 
-  // =========================================================
-  // API REGISTER
-  // =========================================================
-
-  final String registerUrl =
+  static const String registerUrl =
       'https://sijala.biz.id/api/v1/register';
 
   @override
@@ -36,14 +34,10 @@ class _RegisterPageState extends State<RegisterPage> {
     nameController.dispose();
     emailController.dispose();
     phoneController.dispose();
-
     super.dispose();
   }
 
-  // =========================================================
-  // TEXT FIELD
-  // =========================================================
-
+  
   Widget buildTextField({
     required TextEditingController controller,
     required String label,
@@ -56,32 +50,27 @@ class _RegisterPageState extends State<RegisterPage> {
       child: TextFormField(
         controller: controller,
         keyboardType: keyboardType,
-
+        enabled: !isLoading,
         decoration: InputDecoration(
           labelText: label,
-
           prefixIcon: Icon(
             icon,
             color: primaryColor,
           ),
-
           filled: true,
           fillColor: Colors.white,
-
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(15),
             borderSide: BorderSide(
               color: Colors.grey.shade300,
             ),
           ),
-
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(15),
             borderSide: BorderSide(
               color: Colors.grey.shade300,
             ),
           ),
-
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(15),
             borderSide: const BorderSide(
@@ -89,97 +78,68 @@ class _RegisterPageState extends State<RegisterPage> {
               width: 2,
             ),
           ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(15),
+            borderSide: const BorderSide(
+              color: Colors.red,
+            ),
+          ),
+          focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(15),
+            borderSide: const BorderSide(
+              color: Colors.red,
+              width: 2,
+            ),
+          ),
         ),
-
         validator: validator,
       ),
     );
   }
 
-  // =========================================================
   // REGISTER
-  // =========================================================
-
   Future<void> register() async {
-    // -------------------------------------------------------
-    // VALIDASI FORM
-    // -------------------------------------------------------
-
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    // -------------------------------------------------------
-    // VALIDASI GENDER
-    // -------------------------------------------------------
-
     if (gender == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Silakan pilih jenis kelamin',
-          ),
+          content: Text('Silakan pilih jenis kelamin'),
           backgroundColor: Colors.red,
         ),
       );
-
       return;
     }
-
-    // -------------------------------------------------------
-    // LOADING
-    // -------------------------------------------------------
 
     setState(() {
       isLoading = true;
     });
 
     try {
-      // =====================================================
-      // REQUEST DATA
-      // =====================================================
-
       final requestData = {
         'name': nameController.text.trim(),
         'email': emailController.text.trim(),
         'phone': phoneController.text.trim(),
-
-        // API meminta L atau P
         'gender': gender,
       };
 
-      print('Request Register: $requestData');
+      debugPrint('Request Register: $requestData');
 
-      // =====================================================
-      // REQUEST POST API
-      // =====================================================
+      final response = await http
+          .post(
+            Uri.parse(registerUrl),
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(requestData),
+          )
+          .timeout(const Duration(seconds: 20));
 
-      final response = await http.post(
-        Uri.parse(
-          'https://sijala.biz.id/api/v1/register',
-        ),
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(requestData),
-      );
-
-      // =====================================================
-      // DEBUG
-      // =====================================================
-
-      print(
-        'Register Status Code: ${response.statusCode}',
-      );
-
-      print(
-        'Register Response: ${response.body}',
-      );
-
-      // =====================================================
-      // DECODE RESPONSE
-      // =====================================================
+      debugPrint('Register Status: ${response.statusCode}');
+      debugPrint('Register Response: ${response.body}');
 
       dynamic data;
 
@@ -189,99 +149,77 @@ class _RegisterPageState extends State<RegisterPage> {
         data = {};
       }
 
-      // =====================================================
       // REGISTER BERHASIL
-      // =====================================================
-
       if (response.statusCode == 200 ||
           response.statusCode == 201) {
         if (!mounted) return;
 
         String message = 'Registrasi berhasil';
 
-        if (data is Map &&
-            data['message'] != null) {
+        if (data is Map && data['message'] != null) {
           message = data['message'].toString();
         }
 
-        // ---------------------------------------------------
-        // SIMPAN DATA REGISTER SEMENTARA
-        // ---------------------------------------------------
-
-        final prefs =
-            await SharedPreferences.getInstance();
-
+        // Simpan data user jika API mengembalikannya.
+        // Registrasi tidak otomatis dianggap sebagai login.
         dynamic userData;
 
-        if (data is Map && data['user'] != null) {
+        if (data is Map && data['user'] is Map) {
           userData = data['user'];
-        } else if (data is Map &&
-            data['data'] != null) {
-          userData = data['data'];
+        } else if (data is Map && data['data'] is Map) {
+          final dataMap = data['data'];
+
+          if (dataMap['user'] is Map) {
+            userData = dataMap['user'];
+          } else {
+            userData = dataMap;
+          }
         }
 
-        if (userData != null) {
-          await prefs.setString(
-            'user',
-            jsonEncode(userData),
-          );
+        if (userData is Map) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('registered_user', jsonEncode(userData));
         }
 
-        // ---------------------------------------------------
-        // PESAN BERHASIL
-        // ---------------------------------------------------
+        if (!mounted) return;
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message),
-            backgroundColor: Colors.green,
+            backgroundColor: primaryColor,
           ),
         );
 
-        // ---------------------------------------------------
-        // KEMBALI KE LOGIN
-        // ---------------------------------------------------
-
+        // Kembali ke halaman login.
         Navigator.pop(context);
       }
 
-      // =====================================================
       // VALIDASI GAGAL
-      // =====================================================
-
       else if (response.statusCode == 422) {
         if (!mounted) return;
 
         String message = 'Validasi gagal';
 
-        if (data is Map &&
-            data['message'] != null) {
+        if (data is Map && data['message'] != null) {
           message = data['message'].toString();
         }
 
-        // ---------------------------------------------------
-        // AMBIL DETAIL ERROR
-        // ---------------------------------------------------
-
-        if (data is Map &&
-            data['errors'] is Map) {
+        if (data is Map && data['errors'] is Map) {
           final errors = data['errors'] as Map;
-
-          List<String> errorMessages = [];
+          final List<String> errorMessages = [];
 
           errors.forEach((key, value) {
             if (value is List) {
               for (final error in value) {
-                errorMessages.add(
-                  error.toString(),
-                );
+                errorMessages.add(error.toString());
               }
+            } else if (value != null) {
+              errorMessages.add(value.toString());
             }
           });
 
           if (errorMessages.isNotEmpty) {
-            message =
-                errorMessages.join('\n');
+            message = errorMessages.join('\n');
           }
         }
 
@@ -294,18 +232,14 @@ class _RegisterPageState extends State<RegisterPage> {
         );
       }
 
-      // =====================================================
-      // ERROR LAIN
-      // =====================================================
-
+      // klo error
       else {
         if (!mounted) return;
 
         String message =
             'Registrasi gagal (${response.statusCode})';
 
-        if (data is Map &&
-            data['message'] != null) {
+        if (data is Map && data['message'] != null) {
           message = data['message'].toString();
         }
 
@@ -317,19 +251,13 @@ class _RegisterPageState extends State<RegisterPage> {
         );
       }
     } catch (e) {
-      // =====================================================
-      // ERROR CONNECTION
-      // =====================================================
-
-      print('Error Register: $e');
+      debugPrint('Error Register: $e');
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Tidak dapat terhubung ke server',
-          ),
+          content: Text('Tidak dapat terhubung ke server'),
           backgroundColor: Colors.red,
         ),
       );
@@ -342,326 +270,208 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  // =========================================================
-  // BUILD
-  // =========================================================
 
+  // BUILD
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F8F8),
-
+      backgroundColor: backgroundColor,
+      appBar: AppBar(
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: const Text(
+          'Register',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
-
             child: Card(
-              elevation: 5,
-
-              shadowColor: Colors.black12,
-
+              color: Colors.white,
+              elevation: 4,
+              shadowColor: primaryColor.withOpacity(0.12),
               shape: RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(25),
+                borderRadius: BorderRadius.circular(22),
               ),
-
               child: Padding(
-                padding: const EdgeInsets.all(28),
-
+                padding: const EdgeInsets.all(25),
                 child: Form(
                   key: _formKey,
-
                   child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.stretch,
-
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // =================================================
                       // ICON
-                      // =================================================
-
                       const CircleAvatar(
                         radius: 38,
-
-                        backgroundColor:
-                            primaryColor,
-
+                        backgroundColor: lightBlue,
                         child: Icon(
                           Icons.person_add_alt_1,
-                          color: Colors.white,
+                          color: primaryColor,
                           size: 40,
                         ),
                       ),
 
                       const SizedBox(height: 20),
 
-                      // =================================================
-                      // TITLE
-                      // =================================================
-
+                      // JUDUL
                       const Text(
                         'REGISTER',
-
-                        textAlign:
-                            TextAlign.center,
-
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 27,
-                          fontWeight:
-                              FontWeight.bold,
-                          color:
-                              primaryColor,
+                          fontWeight: FontWeight.bold,
+                          color: primaryColor,
                         ),
                       ),
 
                       const SizedBox(height: 8),
 
-                      const Text(
+                      Text(
                         'Lengkapi data diri Anda',
-
-                        textAlign:
-                            TextAlign.center,
-
+                        textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Colors.grey,
+                          color: Colors.grey.shade600,
                           fontSize: 15,
                         ),
                       ),
 
                       const SizedBox(height: 30),
 
-                      // =================================================
                       // NAMA
-                      // =================================================
-
                       buildTextField(
-                        controller:
-                            nameController,
-                        label:
-                            'Nama Lengkap',
-                        icon:
-                            Icons.person_outline,
-
+                        controller: nameController,
+                        label: 'Nama Lengkap',
+                        icon: Icons.person_outline,
                         validator: (value) {
-                          if (value == null ||
-                              value.trim().isEmpty) {
+                          if (value == null || value.trim().isEmpty) {
                             return 'Nama wajib diisi';
                           }
-
                           return null;
                         },
                       ),
 
-                      // =================================================
-                      // GENDER
-                      // =================================================
-
-                      DropdownButtonFormField<String>(
-                        value: gender,
-
-                        decoration:
-                            InputDecoration(
-                          labelText:
-                              'Jenis Kelamin',
-
-                          prefixIcon:
-                              const Icon(
-                            Icons.people_outline,
-                            color:
-                                primaryColor,
-                          ),
-
-                          filled: true,
-                          fillColor:
-                              Colors.white,
-
-                          border:
-                              OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(
-                                    15),
-                          ),
-
-                          enabledBorder:
-                              OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(
-                                    15),
-
-                            borderSide:
-                                BorderSide(
-                              color: Colors
-                                  .grey
-                                  .shade300,
+                      // JENIS KELAMIN
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 18),
+                        child: DropdownButtonFormField<String>(
+                          value: gender,
+                          decoration: InputDecoration(
+                            labelText: 'Jenis Kelamin',
+                            prefixIcon: const Icon(
+                              Icons.people_outline,
+                              color: primaryColor,
+                            ),
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(15),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(15),
+                              borderSide: const BorderSide(
+                                color: primaryColor,
+                                width: 2,
+                              ),
                             ),
                           ),
-
-                          focusedBorder:
-                              OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(
-                                    15),
-
-                            borderSide:
-                                const BorderSide(
-                              color:
-                                  primaryColor,
-                              width: 2,
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'L',
+                              child: Text('Laki-laki'),
                             ),
-                          ),
+                            DropdownMenuItem(
+                              value: 'P',
+                              child: Text('Perempuan'),
+                            ),
+                          ],
+                          onChanged: isLoading
+                              ? null
+                              : (value) {
+                                  setState(() {
+                                    gender = value;
+                                  });
+                                },
+                          validator: (value) {
+                            if (value == null) {
+                              return 'Jenis kelamin wajib dipilih';
+                            }
+                            return null;
+                          },
                         ),
-
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'L',
-                            child:
-                                Text('Laki-laki'),
-                          ),
-
-                          DropdownMenuItem(
-                            value: 'P',
-                            child:
-                                Text('Perempuan'),
-                          ),
-                        ],
-
-                        onChanged: isLoading
-                            ? null
-                            : (value) {
-                                setState(() {
-                                  gender = value;
-                                });
-                              },
-
-                        validator: (value) {
-                          if (value == null) {
-                            return 'Jenis kelamin wajib dipilih';
-                          }
-
-                          return null;
-                        },
                       ),
 
-                      const SizedBox(height: 18),
-
-                      // =================================================
                       // EMAIL
-                      // =================================================
-
                       buildTextField(
-                        controller:
-                            emailController,
-
+                        controller: emailController,
                         label: 'Email',
-
-                        icon:
-                            Icons.email_outlined,
-
-                        keyboardType:
-                            TextInputType
-                                .emailAddress,
-
+                        icon: Icons.email_outlined,
+                        keyboardType: TextInputType.emailAddress,
                         validator: (value) {
-                          if (value == null ||
-                              value.trim().isEmpty) {
+                          if (value == null || value.trim().isEmpty) {
                             return 'Email wajib diisi';
                           }
-
-                          if (!value
-                              .contains('@')) {
+                          if (!value.contains('@')) {
                             return 'Format email tidak valid';
                           }
-
                           return null;
                         },
                       ),
 
-                      // =================================================
-                      // PHONE
-                      // =================================================
-
+                      // NOMOR HANDPHONE
                       buildTextField(
-                        controller:
-                            phoneController,
-
-                        label:
-                            'Nomor Handphone',
-
-                        icon:
-                            Icons.phone_outlined,
-
-                        keyboardType:
-                            TextInputType.phone,
-
+                        controller: phoneController,
+                        label: 'Nomor Handphone',
+                        icon: Icons.phone_outlined,
+                        keyboardType: TextInputType.phone,
                         validator: (value) {
-                          if (value == null ||
-                              value.trim().isEmpty) {
+                          if (value == null || value.trim().isEmpty) {
                             return 'Nomor handphone wajib diisi';
                           }
-
                           return null;
                         },
                       ),
 
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
 
-                      // =================================================
-                      // BUTTON REGISTER
-                      // =================================================
-
+                      // TOMBOL REGISTER
                       SizedBox(
-                        height: 55,
-
-                        child:
-                            ElevatedButton(
-                          onPressed:
-                              isLoading
-                                  ? null
-                                  : register,
-
-                          style:
-                              ElevatedButton
-                                  .styleFrom(
-                            backgroundColor:
-                                primaryColor,
-
-                            foregroundColor:
-                                Colors.white,
-
-                            elevation: 0,
-
-                            shape:
-                                RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(
-                                      15),
+                        height: 52,
+                        child: ElevatedButton(
+                          onPressed: isLoading ? null : register,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryColor,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: Colors.blue.shade200,
+                            elevation: 2,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
                             ),
                           ),
-
                           child: isLoading
                               ? const SizedBox(
                                   width: 24,
                                   height: 24,
-
-                                  child:
-                                      CircularProgressIndicator(
-                                    color:
-                                        Colors.white,
-                                    strokeWidth:
-                                        3,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 3,
                                   ),
                                 )
                               : const Text(
                                   'REGISTER',
-
-                                  style:
-                                      TextStyle(
-                                    fontSize:
-                                        17,
-                                    fontWeight:
-                                        FontWeight
-                                            .bold,
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                         ),
@@ -669,27 +479,18 @@ class _RegisterPageState extends State<RegisterPage> {
 
                       const SizedBox(height: 15),
 
-                      // =================================================
-                      // LOGIN
-                      // =================================================
-
+                      // KEMBALI KE LOGIN
                       TextButton(
                         onPressed: isLoading
                             ? null
                             : () {
-                                Navigator.pop(
-                                  context,
-                                );
+                                Navigator.pop(context);
                               },
-
                         child: const Text(
                           'Sudah punya akun? Login',
-
                           style: TextStyle(
-                            color:
-                                primaryColor,
-                            fontWeight:
-                                FontWeight.w600,
+                            color: primaryColor,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),

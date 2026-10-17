@@ -16,42 +16,27 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  // =========================================================
-  // CONTROLLER
-  // =========================================================
-
+  // menghubungkn text filed dgn contollr
   final TextEditingController emailController = TextEditingController();
-
   final TextEditingController passwordController = TextEditingController();
 
-  // =========================================================
   // VARIABLE
-  // =========================================================
-
   bool isHidden = true;
   bool isLoading = false;
 
-  static const Color primaryColor = Color(0xFF7B1E3A);
 
-  // =========================================================
+  static const Color primaryColor = Color(0xFF1976D2);
+  static const Color backgroundColor = Color(0xFFF5F9FF);
+
   // API LOGIN
-  // =========================================================
-
   static const String apiUrl = 'https://sijala.biz.id/api/v1/login';
 
-  // =========================================================
   // LOGIN
-  // =========================================================
-
   Future<void> login() async {
     final email = emailController.text.trim();
-
     final password = passwordController.text.trim();
 
-    // =======================================================
     // VALIDASI EMAIL
-    // =======================================================
-
     if (email.isEmpty) {
       showMessage('Email wajib diisi', Colors.red);
       return;
@@ -62,10 +47,7 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
-    // =======================================================
     // VALIDASI PASSWORD
-    // =======================================================
-
     if (password.isEmpty) {
       showMessage('Password wajib diisi', Colors.red);
       return;
@@ -76,107 +58,58 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
-    // =======================================================
-    // LOADING
-    // =======================================================
-
     setState(() {
       isLoading = true;
     });
 
     try {
-      // =====================================================
-      // REQUEST LOGIN
-      // =====================================================
+      final requestData = {
+        'email': email,
+        'password': password,
+      };
 
-      final requestData = {'email': email, 'password': password};
+      debugPrint('REQUEST LOGIN: $requestData');
 
-      print('======================================');
-      print('REQUEST LOGIN');
-      print(requestData);
-      print('======================================');
+      final response = await http
+          .post(
+            Uri.parse(apiUrl),
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(requestData),
+          )
+          .timeout(const Duration(seconds: 20));
 
-      final response = await http.post(
-        Uri.parse(apiUrl),
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(requestData),
-      );
-
-      // =====================================================
-      // DEBUG
-      // =====================================================
-
-      print('======================================');
-      print('LOGIN STATUS: ${response.statusCode}');
-      print('LOGIN RESPONSE:');
-      print(response.body);
-      print('======================================');
-
-      // =====================================================
-      // DECODE JSON
-      // =====================================================
+      debugPrint('LOGIN STATUS: ${response.statusCode}');
+      debugPrint('LOGIN RESPONSE: ${response.body}');
 
       dynamic data;
 
       try {
         data = jsonDecode(response.body);
       } catch (e) {
+        debugPrint('JSON ERROR: $e');
         data = {};
-
-        print('JSON ERROR: $e');
       }
 
-      // =====================================================
       // LOGIN BERHASIL
-      // =====================================================
-
       if (response.statusCode == 200) {
-        print('LOGIN BERHASIL');
-
         String? token;
         dynamic userData;
 
-        // ===================================================
-        // CARI TOKEN
-        // ===================================================
-
         if (data is Map) {
-          // -------------------------------------------------
-          // FORMAT:
-          // {
-          //   "token": "xxxxx"
-          // }
-          // -------------------------------------------------
-
           if (data['token'] != null) {
             token = data['token'].toString();
           }
-
-          // -------------------------------------------------
-          // FORMAT:
-          // {
-          //   "access_token": "xxxxx"
-          // }
-          // -------------------------------------------------
 
           if ((token == null || token.isEmpty) &&
               data['access_token'] != null) {
             token = data['access_token'].toString();
           }
 
-          // -------------------------------------------------
-          // FORMAT:
-          // {
-          //   "data": {
-          //      "token": "xxxxx"
-          //   }
-          // }
-          // -------------------------------------------------
-
-          if ((token == null || token.isEmpty) && data['data'] is Map) {
+          if ((token == null || token.isEmpty) &&
+              data['data'] is Map) {
             final dataMap = Map<String, dynamic>.from(data['data']);
 
             if (dataMap['token'] != null) {
@@ -190,55 +123,25 @@ class _LoginPageState extends State<LoginPage> {
           }
         }
 
-        // ===================================================
-        // DEBUG TOKEN
-        // ===================================================
-
-        print('======================================');
-        print('TOKEN HASIL LOGIN: $token');
-        print('======================================');
-
-        // ===================================================
-        // SIMPAN TOKEN
-        // ===================================================
-
-        if (token != null && token.isNotEmpty) {
-          final prefs = await SharedPreferences.getInstance();
-
-          // Hapus token lama terlebih dahulu
-          await prefs.remove('token');
-
-          // Simpan token baru
-          await prefs.setString('token', token);
-
-          print('======================================');
-          print('TOKEN BERHASIL DISIMPAN');
-          print('TOKEN: $token');
-          print('======================================');
-
-          // Cek ulang token
-          final savedToken = prefs.getString('token');
-
-          print('TOKEN DARI STORAGE: $savedToken');
-        } else {
-          print('======================================');
-          print('TOKEN TIDAK DITEMUKAN');
-          print('======================================');
-
+        // TOKEN TIDAK DITEMUKAN
+        if (token == null || token.isEmpty) {
           if (!mounted) return;
 
           showMessage(
             'Login berhasil tetapi token tidak ditemukan',
             Colors.red,
           );
-
           return;
         }
 
-        // ===================================================
-        // CARI DATA USER
-        // ===================================================
+        // SIMPAN TOKEN
+        final prefs = await SharedPreferences.getInstance();
 
+        await prefs.setString('token', token);
+
+        debugPrint('TOKEN BERHASIL DISIMPAN');
+
+        // AMBIL DATA USER
         if (data is Map) {
           if (data['user'] is Map) {
             userData = data['user'];
@@ -253,61 +156,27 @@ class _LoginPageState extends State<LoginPage> {
           }
         }
 
-        // ===================================================
         // SIMPAN DATA USER
-        // ===================================================
-
         if (userData is Map) {
-          final prefs = await SharedPreferences.getInstance();
-
           await prefs.setString('user', jsonEncode(userData));
-
-          print('======================================');
-          print('DATA USER BERHASIL DISIMPAN');
-          print(userData);
-          print('======================================');
         }
-
-        // ===================================================
-        // CEK WIDGET
-        // ===================================================
 
         if (!mounted) return;
 
-        // ===================================================
-        // PESAN BERHASIL
-        // ===================================================
-
         showMessage('Login berhasil', Colors.green);
 
-        // ===================================================
         // KE DASHBOARD
-        // ===================================================
-        //
-        // PENTING:
-        // Sekarang menggunakan GoRouter,
-        // sama seperti logout.
-        //
-        // ===================================================
-
         context.go(AppRoutes.dashboard);
-
         return;
       }
 
-      // =====================================================
-      // 404
-      // =====================================================
-
+      // EMAIL TIDAK DITEMUKAN
       if (response.statusCode == 404) {
         showMessage('Email tidak ditemukan', Colors.red);
         return;
       }
 
-      // =====================================================
-      // 401
-      // =====================================================
-
+      // EMAIL ATAU PASSWORD SALAH
       if (response.statusCode == 401) {
         String message = 'Email atau password salah';
 
@@ -316,14 +185,10 @@ class _LoginPageState extends State<LoginPage> {
         }
 
         showMessage(message, Colors.red);
-
         return;
       }
 
-      // =====================================================
-      // ERROR LAIN
-      // =====================================================
-
+      // ERROR LAINNYA
       String message = 'Login gagal (${response.statusCode})';
 
       if (data is Map && data['message'] != null) {
@@ -332,10 +197,7 @@ class _LoginPageState extends State<LoginPage> {
 
       showMessage(message, Colors.red);
     } catch (e) {
-      print('======================================');
-      print('ERROR LOGIN');
-      print(e);
-      print('======================================');
+      debugPrint('ERROR LOGIN: $e');
 
       if (!mounted) return;
 
@@ -349,56 +211,47 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // =========================================================
   // SNACKBAR
-  // =========================================================
-
   void showMessage(String message, Color color) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+      ),
+    );
   }
 
-  // =========================================================
   // DISPOSE
-  // =========================================================
-
   @override
   void dispose() {
     emailController.dispose();
     passwordController.dispose();
-
     super.dispose();
   }
 
-  // =========================================================
   // BUILD
-  // =========================================================
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-
+      backgroundColor: backgroundColor,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 25),
-
             child: Column(
               children: [
-                // =================================================
                 // ICON
-                // =================================================
-                const Icon(Icons.lock_outline, size: 90, color: primaryColor),
+                const Icon(
+                  Icons.lock_outline,
+                  size: 90,
+                  color: primaryColor,
+                ),
 
                 const SizedBox(height: 20),
 
-                // =================================================
                 // TITLE
-                // =================================================
                 const Text(
                   'Selamat Datang',
                   style: TextStyle(
@@ -412,32 +265,30 @@ class _LoginPageState extends State<LoginPage> {
 
                 const Text(
                   'Silakan login untuk melanjutkan',
-                  style: TextStyle(color: Colors.grey, fontSize: 16),
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 16,
+                  ),
                 ),
 
                 const SizedBox(height: 40),
 
-                // =================================================
                 // EMAIL
-                // =================================================
                 TextField(
                   controller: emailController,
-
                   keyboardType: TextInputType.emailAddress,
-
                   decoration: InputDecoration(
                     hintText: 'Email',
-
-                    prefixIcon: const Icon(Icons.email, color: primaryColor),
-
+                    prefixIcon: const Icon(
+                      Icons.email,
+                      color: primaryColor,
+                    ),
                     filled: true,
                     fillColor: Colors.white,
-
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
                       borderSide: BorderSide.none,
                     ),
-
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
                       borderSide: const BorderSide(
@@ -450,40 +301,35 @@ class _LoginPageState extends State<LoginPage> {
 
                 const SizedBox(height: 20),
 
-                // =================================================
                 // PASSWORD
-                // =================================================
                 TextField(
                   controller: passwordController,
-
                   obscureText: isHidden,
-
                   decoration: InputDecoration(
                     hintText: 'Password',
-
-                    prefixIcon: const Icon(Icons.lock, color: primaryColor),
-
+                    prefixIcon: const Icon(
+                      Icons.lock,
+                      color: primaryColor,
+                    ),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        isHidden ? Icons.visibility_off : Icons.visibility,
+                        isHidden
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                         color: primaryColor,
                       ),
-
                       onPressed: () {
                         setState(() {
                           isHidden = !isHidden;
                         });
                       },
                     ),
-
                     filled: true,
                     fillColor: Colors.white,
-
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
                       borderSide: BorderSide.none,
                     ),
-
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
                       borderSide: const BorderSide(
@@ -496,15 +342,11 @@ class _LoginPageState extends State<LoginPage> {
 
                 const SizedBox(height: 15),
 
-                // =================================================
                 // LUPA PASSWORD
-                // =================================================
                 Align(
                   alignment: Alignment.centerRight,
-
                   child: TextButton(
                     onPressed: isLoading ? null : () {},
-
                     child: const Text(
                       'Lupa Password?',
                       style: TextStyle(color: primaryColor),
@@ -514,27 +356,19 @@ class _LoginPageState extends State<LoginPage> {
 
                 const SizedBox(height: 10),
 
-                // =================================================
                 // LOGIN BUTTON
-                // =================================================
                 SizedBox(
                   width: double.infinity,
-
                   height: 50,
-
                   child: ElevatedButton(
                     onPressed: isLoading ? null : login,
-
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColor,
-
                       foregroundColor: Colors.white,
-
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(15),
                       ),
                     ),
-
                     child: isLoading
                         ? const SizedBox(
                             width: 25,
@@ -557,27 +391,17 @@ class _LoginPageState extends State<LoginPage> {
 
                 const SizedBox(height: 20),
 
-                // =================================================
                 // REGISTER
-                // =================================================
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-
                   children: [
                     const Text('Belum punya akun?'),
-
                     TextButton(
                       onPressed: isLoading
                           ? null
                           : () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const RegisterPage(),
-                                ),
-                              );
+                              context.push(AppRoutes.register);
                             },
-
                       child: const Text(
                         'Daftar',
                         style: TextStyle(
