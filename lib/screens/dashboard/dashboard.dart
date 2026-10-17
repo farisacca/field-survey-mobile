@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:field_survey/routes/app_routes.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -8,38 +7,35 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class DashboardPage extends StatefulWidget {
   final String? token;
-
   const DashboardPage({super.key, this.token});
-
   @override
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
 class _DashboardPageState extends State<DashboardPage>
     with WidgetsBindingObserver {
-  static const Color primary = Color(0xFF1976D2);
-  static const Color lightBlue = Color(0xFFE3F0FF);
-  static const Color background = Color(0xFFF5F9FF);
+  // THEME BURGUNDY
+  static const primary = Color(0xFF800020);
+  static const darkBurgundy = Color(0xFF4A0E12);
+  static const lightBurgundy = Color(0xFFFDF2F4);
+  static const background = Color(0xFFFFF4F5);
+  static const successColor = Color(0xFF2E7D32);
+  static const errorColor = Color(0xFFC62828);
 
   static const String baseUrl = 'https://sijala.biz.id/api/v1';
 
   int _selectedIndex = 0;
-
   bool _isLoading = true;
   bool _isRequesting = false;
   bool _hasError = false;
-
   int _totalSurvey = 0;
   int _totalKategori = 0;
-
   String _userName = 'Pengguna';
-
   List<dynamic> _recentSurveys = [];
 
   @override
   void initState() {
     super.initState();
-
     WidgetsBinding.instance.addObserver(this);
     _loadDynamicData();
   }
@@ -52,12 +48,9 @@ class _DashboardPageState extends State<DashboardPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _loadDynamicData();
-    }
+    if (state == AppLifecycleState.resumed) _loadDynamicData();
   }
 
-  // MENGAMBIL NAMA PENGGUNA
   Future<void> _loadUserName(String token) async {
     try {
       final response = await http
@@ -69,157 +62,66 @@ class _DashboardPageState extends State<DashboardPage>
             },
           )
           .timeout(const Duration(seconds: 15));
-
-      debugPrint('PROFILE STATUS: ${response.statusCode}');
-      debugPrint('PROFILE BODY: ${response.body}');
-
       if (response.statusCode != 200) return;
-
       final result = jsonDecode(response.body);
       dynamic user = result;
-
-      if (result is Map && result['data'] != null) {
-        user = result['data'];
-      }
-
-      if (user is Map && user['user'] is Map) {
-        user = user['user'];
-      }
-
+      if (result is Map && result['data'] != null) user = result['data'];
+      if (user is Map && user['user'] is Map) user = user['user'];
       if (user is Map) {
-        final name = user['name'] ??
-            user['nama'] ??
-            user['nama_user'] ??
-            user['nama_pengguna'] ??
-            user['full_name'] ??
-            user['username'];
-
+        final name = user['name'] ?? user['nama'] ?? user['username'];
         if (name != null && name.toString().trim().isNotEmpty) {
-          final nameValue = name.toString().trim();
-
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('user_name', nameValue);
-
+          await prefs.setString('user_name', name.toString().trim());
           if (!mounted) return;
-
-          setState(() {
-            _userName = nameValue;
-          });
+          setState(() => _userName = name.toString().trim());
         }
       }
     } catch (e) {
-      debugPrint('Gagal mengambil profil: $e');
+      debugPrint('Gagal profil: $e');
     }
   }
 
-  // MEMBACA DATA SURVEI DARI RESPONS API
   List<dynamic> _parseSurveys(dynamic body) {
-    if (body is List) {
-      return body;
-    }
-
+    if (body is List) return body;
     if (body is Map) {
-      if (body['data'] is List) {
-        return body['data'] as List;
-      }
-
-      if (body['data'] is Map &&
-          body['data']['data'] is List) {
+      if (body['data'] is List) return body['data'] as List;
+      if (body['data'] is Map && body['data']['data'] is List)
         return body['data']['data'] as List;
-      }
     }
-
-    throw const FormatException(
-      'Format respons survei tidak sesuai',
-    );
+    throw const FormatException('Format respons survei tidak sesuai');
   }
 
-  // MENGHITUNG KATEGORI BERBEDA YANG DIGUNAKAN SURVEI
   int _countUniqueCategories(List<dynamic> surveys) {
     final Set<String> categories = {};
-
     for (final survey in surveys) {
       if (survey is! Map) continue;
-
       final categoryId = survey['category_id'];
-
-      if (categoryId != null &&
-          categoryId.toString().trim().isNotEmpty) {
+      if (categoryId != null && categoryId.toString().trim().isNotEmpty) {
         categories.add(categoryId.toString());
         continue;
       }
-
       final category = survey['category'];
-
-      if (category is Map && category['id'] != null) {
+      if (category is Map && category['id'] != null)
         categories.add(category['id'].toString());
-      } else if (category is Map &&
-          category['name'] != null) {
-        categories.add(
-          category['name'].toString().trim().toLowerCase(),
-        );
-      } else if (category is String &&
-          category.trim().isNotEmpty) {
+      else if (category is String && category.trim().isNotEmpty)
         categories.add(category.trim().toLowerCase());
-      }
     }
-
     return categories.length;
   }
 
-  // MENGAMBIL DATA DASHBOARD
   Future<void> _loadDynamicData() async {
     if (!mounted || _isRequesting) return;
-
     _isRequesting = true;
-
     setState(() {
-      _isLoading = _totalSurvey == 0 &&
-          _recentSurveys.isEmpty &&
-          !_hasError;
+      _isLoading = _totalSurvey == 0 && _recentSurveys.isEmpty && !_hasError;
       _hasError = false;
     });
-
     try {
       final prefs = await SharedPreferences.getInstance();
-
-      final token = widget.token ??
-          prefs.getString('token') ??
-          prefs.getString('access_token') ??
-          '';
-
-      
+      final token = widget.token ?? prefs.getString('token') ?? '';
       final savedName = prefs.getString('user_name');
-
-      if (savedName != null && savedName.trim().isNotEmpty) {
+      if (savedName != null && savedName.trim().isNotEmpty)
         _userName = savedName.trim();
-      } else {
-        final userJson = prefs.getString('user');
-
-        if (userJson != null && userJson.isNotEmpty) {
-          try {
-            final user = jsonDecode(userJson);
-
-            if (user is Map) {
-              final name = user['name'] ??
-                  user['nama'] ??
-                  user['nama_user'] ??
-                  user['nama_pengguna'] ??
-                  user['username'];
-
-              if (name != null &&
-                  name.toString().trim().isNotEmpty) {
-                _userName = name.toString().trim();
-              }
-            }
-          } catch (e) {
-            debugPrint('Gagal membaca data user: $e');
-          }
-        }
-      }
-
-      if (!mounted) return;
-
       if (token.isEmpty) {
         setState(() {
           _isLoading = false;
@@ -227,10 +129,7 @@ class _DashboardPageState extends State<DashboardPage>
         });
         return;
       }
-
       await _loadUserName(token);
-
-      
       final surveyResponse = await http
           .get(
             Uri.parse('$baseUrl/surveys'),
@@ -240,98 +139,52 @@ class _DashboardPageState extends State<DashboardPage>
             },
           )
           .timeout(const Duration(seconds: 15));
-
-      debugPrint('SURVEY STATUS: ${surveyResponse.statusCode}');
-      debugPrint('SURVEY BODY: ${surveyResponse.body}');
-
-      if (surveyResponse.statusCode != 200) {
-        throw Exception(
-          'Gagal mengambil data survei: '
-          '${surveyResponse.statusCode}',
-        );
-      }
-
-      final surveyBody = jsonDecode(surveyResponse.body);
-      final surveys = _parseSurveys(surveyBody);
-
-    
-      final totalKategori = _countUniqueCategories(surveys);
-
+      if (surveyResponse.statusCode != 200) throw Exception('Gagal survey');
+      final surveys = _parseSurveys(jsonDecode(surveyResponse.body));
       if (!mounted) return;
-
       setState(() {
         _totalSurvey = surveys.length;
-        _totalKategori = totalKategori;
+        _totalKategori = _countUniqueCategories(surveys);
         _recentSurveys = surveys.reversed.take(4).toList();
         _isLoading = false;
         _hasError = false;
       });
     } catch (e) {
-      debugPrint('Gagal memuat dashboard: $e');
-
       if (!mounted) return;
-
       setState(() {
         _isLoading = false;
         _hasError = true;
       });
     } finally {
       _isRequesting = false;
-
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _refreshDashboard() async {
-    await _loadDynamicData();
-  }
+  Future<void> _refreshDashboard() async => await _loadDynamicData();
 
   Future<void> _openPage(String route) async {
     await context.push(route);
-
     if (!mounted) return;
-
-    setState(() {
-      _selectedIndex = 0;
-    });
-
+    setState(() => _selectedIndex = 0);
     await _loadDynamicData();
   }
 
   Future<void> _onBottomTap(int index) async {
     if (index == 0) {
-      setState(() {
-        _selectedIndex = 0;
-      });
-
+      setState(() => _selectedIndex = 0);
       await _loadDynamicData();
     } else if (index == 1) {
-      setState(() {
-        _selectedIndex = 1;
-      });
-
+      setState(() => _selectedIndex = 1);
       await _openPage(AppRoutes.survey);
     } else if (index == 2) {
-      setState(() {
-        _selectedIndex = 2;
-      });
-
+      setState(() => _selectedIndex = 2);
       await context.push(AppRoutes.profil);
-
       if (!mounted) return;
-
-      setState(() {
-        _selectedIndex = 0;
-      });
-
+      setState(() => _selectedIndex = 0);
       await _loadDynamicData();
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -340,63 +193,66 @@ class _DashboardPageState extends State<DashboardPage>
       appBar: AppBar(
         title: const Text(
           'Dashboard',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         backgroundColor: primary,
         foregroundColor: Colors.white,
         elevation: 0,
+        centerTitle: false,
       ),
       body: RefreshIndicator(
         onRefresh: _refreshDashboard,
         color: primary,
         backgroundColor: Colors.white,
-        displacement: 50,
         child: ListView(
-          key: const PageStorageKey('dashboard_list'),
           physics: const AlwaysScrollableScrollPhysics(
             parent: BouncingScrollPhysics(),
           ),
           padding: const EdgeInsets.all(20),
           children: [
             _buildWelcomeCard(),
-
-            const SizedBox(height: 26),
-
+            const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
                   'Ringkasan Data',
                   style: TextStyle(
-                    fontSize: 19,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
+                    color: darkBurgundy,
                   ),
                 ),
                 if (!_isLoading)
-                  Text(
-                    _hasError ? 'Gagal memuat data' : 'Data terbaru',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: _hasError ? Colors.red : Colors.green,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _hasError
+                          ? errorColor.withOpacity(0.1)
+                          : successColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      _hasError ? 'Gagal memuat' : 'Data terbaru',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: _hasError ? errorColor : successColor,
+                      ),
                     ),
                   ),
               ],
             ),
-
-            const SizedBox(height: 15),
-
+            const SizedBox(height: 12),
             if (_isLoading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 25),
-                child: Center(
-                  child: CircularProgressIndicator(
-                    color: primary,
-                  ),
-                ),
+                child: Center(child: CircularProgressIndicator(color: primary)),
               )
-            else ...[
+            else
               Row(
                 children: [
                   Expanded(
@@ -411,141 +267,121 @@ class _DashboardPageState extends State<DashboardPage>
                   const SizedBox(width: 12),
                   Expanded(
                     child: _buildStatCard(
-                      title: 'Kategori Survei',
+                      title: 'Kategori',
                       value: '$_totalKategori',
-                      subtitle: 'Kategori ',
+                      subtitle: 'Kategori aktif',
                       icon: Icons.category_outlined,
-                      color: const Color(0xFF20A879),
+                      color: const Color(0xFF6D4C41),
                     ),
                   ),
                 ],
               ),
 
-              if (_hasError) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'Sebagian data gagal dimuat. Periksa koneksi, '
-                    'token login, dan alamat API.',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
-            ],
-
-            const SizedBox(height: 28),
-
+            const SizedBox(height: 26),
             const Text(
               'Akses Cepat',
               style: TextStyle(
-                fontSize: 19,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
+                color: darkBurgundy,
               ),
             ),
-
-            const SizedBox(height: 15),
-
-            _buildActionCard(
-              icon: Icons.add_chart_rounded,
-              title: 'Mulai Survei',
-              subtitle: 'Buka halaman pengelolaan survei',
-              onTap: () => _openPage(AppRoutes.survey),
-            ),
-
             const SizedBox(height: 12),
 
-            _buildActionCard(
-              icon: Icons.person_outline_rounded,
-              title: 'Profil',
-              subtitle: 'Lihat informasi akun',
-              onTap: () => _openPage(AppRoutes.profil),
+            // AKSES CEPAT BARU - GRID 2 KOLOM
+            Row(
+              children: [
+                Expanded(
+                  child: _buildQuickAccess(
+                    icon: Icons.add_chart_rounded,
+                    title: 'Mulai Survei',
+                    subtitle: 'Kelola survei',
+                    color: primary,
+                    onTap: () => _openPage(AppRoutes.survey),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildQuickAccess(
+                    icon: Icons.person_outline_rounded,
+                    title: 'Profil Saya',
+                    subtitle: 'Info akun',
+                    color: const Color(0xFF6D4C41),
+                    onTap: () => _openPage(AppRoutes.profil),
+                  ),
+                ),
+              ],
             ),
 
-            const SizedBox(height: 28),
-
+            const SizedBox(height: 26),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
                   'Survei Terbaru',
                   style: TextStyle(
-                    fontSize: 19,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
+                    color: darkBurgundy,
                   ),
                 ),
                 TextButton(
                   onPressed: () => _openPage(AppRoutes.survey),
                   child: const Text(
                     'Lihat semua',
-                    style: TextStyle(color: primary),
+                    style: TextStyle(
+                      color: primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
               ],
             ),
-
-            const SizedBox(height: 8),
-
+            const SizedBox(height: 4),
             if (_hasError)
               _buildEmptyState(
                 icon: Icons.cloud_off_outlined,
                 title: 'Data belum tersedia',
-                subtitle:
-                    'Tarik layar ke bawah untuk mencoba kembali.',
+                subtitle: 'Tarik ke bawah untuk refresh',
               )
             else if (_recentSurveys.isEmpty && !_isLoading)
               _buildEmptyState(
                 icon: Icons.assignment_outlined,
                 title: 'Belum ada survei',
-                subtitle: 'Data survei akan muncul di sini.',
+                subtitle: 'Data survei akan muncul di sini',
               )
             else
               ..._recentSurveys.map((survey) {
                 final title = survey is Map
-                    ? survey['title'] ??
-                        survey['judul'] ??
-                        survey['nama_survey'] ??
-                        survey['nama'] ??
-                        'Survei tanpa judul'
+                    ? survey['title'] ?? survey['judul'] ?? 'Survei tanpa judul'
                     : 'Survei';
-
                 final date = survey is Map
-                    ? survey['created_at'] ??
-                        survey['tanggal'] ??
-                        survey['tanggal_survey'] ??
-                        'Data survei'
+                    ? survey['created_at'] ?? 'Data survei'
                     : 'Data survei';
-
                 return Container(
                   margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(15),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(
-                      color: const Color(0xFFE2ECFA),
-                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.grey.shade200),
                   ),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: lightBlue,
-                          borderRadius: BorderRadius.circular(12),
+                          color: lightBurgundy,
+                          borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Icon(
                           Icons.assignment_rounded,
                           color: primary,
+                          size: 20,
                         ),
                       ),
-
                       const SizedBox(width: 12),
-
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -555,43 +391,46 @@ class _DashboardPageState extends State<DashboardPage>
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13.5,
                               ),
                             ),
-                            const SizedBox(height: 5),
+                            const SizedBox(height: 3),
                             Text(
                               date.toString(),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 color: Colors.grey.shade600,
-                                fontSize: 12,
+                                fontSize: 11.5,
                               ),
                             ),
                           ],
                         ),
                       ),
-
                       const Icon(
                         Icons.chevron_right_rounded,
                         color: Colors.grey,
+                        size: 20,
                       ),
                     ],
                   ),
                 );
               }),
-
             const SizedBox(height: 20),
           ],
         ),
       ),
-
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.white,
         selectedItemColor: primary,
-        unselectedItemColor: Colors.grey,
+        unselectedItemColor: Colors.grey.shade400,
+        selectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+        ),
         onTap: _onBottomTap,
         items: const [
           BottomNavigationBarItem(
@@ -614,22 +453,15 @@ class _DashboardPageState extends State<DashboardPage>
   Widget _buildWelcomeCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            Color(0xFF1976D2),
-            Color(0xFF64B5F6),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(22),
+        color: primary,
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: primary.withOpacity(0.20),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            color: primary.withOpacity(0.25),
+            blurRadius: 15,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -641,37 +473,35 @@ class _DashboardPageState extends State<DashboardPage>
               children: [
                 const Text(
                   'Selamat Datang!',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
                   _userName,
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 23,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 11,
-                    vertical: 6,
+                    horizontal: 10,
+                    vertical: 5,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white24,
+                    color: Colors.white.withOpacity(0.18),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text(
-                    'Aplikasi Field Survey',
+                    'Field Survey App',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 11,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
@@ -679,13 +509,18 @@ class _DashboardPageState extends State<DashboardPage>
             ),
           ),
           const SizedBox(width: 10),
-          const CircleAvatar(
-            radius: 30,
-            backgroundColor: Colors.white24,
-            child: Icon(
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.18),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withOpacity(0.3)),
+            ),
+            child: const Icon(
               Icons.person_rounded,
               color: Colors.white,
-              size: 38,
+              size: 30,
             ),
           ),
         ],
@@ -704,59 +539,53 @@ class _DashboardPageState extends State<DashboardPage>
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: color.withOpacity(0.2),
-        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(9),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(12),
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              icon,
-              color: color,
-              size: 25,
-            ),
+            child: Icon(icon, color: color, size: 20),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           Text(
             value,
             style: const TextStyle(
-              fontSize: 27,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
+              color: darkBurgundy,
             ),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 2),
           Text(
             title,
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 12.5,
               fontWeight: FontWeight.w600,
+              color: darkBurgundy,
             ),
           ),
-          const SizedBox(height: 4),
           Text(
             subtitle,
-            style: TextStyle(
-              fontSize: 10,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildActionCard({
+  // AKSES CEPAT MODEL BARU
+  Widget _buildQuickAccess({
     required IconData icon,
     required String title,
     required String subtitle,
+    required Color color,
     required VoidCallback onTap,
   }) {
     return Material(
@@ -765,49 +594,36 @@ class _DashboardPageState extends State<DashboardPage>
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        child: Padding(
+        child: Container(
           padding: const EdgeInsets.all(16),
-          child: Row(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: lightBlue,
-                  borderRadius: BorderRadius.circular(13),
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
-                  icon,
-                  color: primary,
-                  size: 25,
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13.5,
+                  color: darkBurgundy,
                 ),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 15,
-                color: Colors.grey,
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
               ),
             ],
           ),
@@ -823,33 +639,25 @@ class _DashboardPageState extends State<DashboardPage>
   }) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Column(
         children: [
-          Icon(
-            icon,
-            size: 38,
-            color: Colors.grey,
-          ),
-          const SizedBox(height: 10),
+          Icon(icon, size: 32, color: Colors.grey.shade400),
+          const SizedBox(height: 8),
           Text(
             title,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 4),
           Text(
             subtitle,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 11.5),
           ),
         ],
       ),

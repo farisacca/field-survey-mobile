@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:field_survey/screens/auth/login.dart';
 import 'package:http/http.dart' as http;
@@ -12,91 +11,59 @@ import 'package:latlong2/latlong.dart';
 
 class SurveyFormPage extends StatefulWidget {
   final Map<String, dynamic>? survey;
-
   const SurveyFormPage({super.key, this.survey});
-
   @override
   State<SurveyFormPage> createState() => _SurveyFormPageState();
 }
 
 class _SurveyFormPageState extends State<SurveyFormPage> {
   final formKey = GlobalKey<FormState>();
-
   final titleController = TextEditingController();
   final descriptionController = TextEditingController();
   final latitudeController = TextEditingController();
   final longitudeController = TextEditingController();
-
-  
   final MapController mapController = MapController();
-
-  
-  LatLng selectedLocation = const LatLng(
-    -7.360680900582117,
-    108.1057978585817,
-  );
-
+  LatLng selectedLocation = const LatLng(-7.360680900582117, 108.1057978585817);
   int? selectedCategoryId;
   List<Map<String, dynamic>> categories = [];
   bool isLoadingCategories = true;
-
   XFile? selectedImage;
   Uint8List? selectedImageBytes;
   Uint8List? existingImageBytes;
-
   bool isSubmitting = false;
-
   bool get isEdit => widget.survey != null;
 
-  static const Color primaryColor = Color(0xFF1976D2);
-  static const Color lightBlue = Color(0xFFE3F0FF);
-  static const Color backgroundColor = Color(0xFFF5F9FF);
-  static const Color textColor = Color(0xFF1E293B);
-  static const Color borderColor = Color(0xFFD6E6F8);
-  static const Color secondaryTextColor = Color(0xFF64748B);
-  static const Color dangerColor = Color(0xFFEF4444);
+  // THEME BURGUNDY
+  static const primaryColor = Color(0xFF800020);
+  static const darkBurgundy = Color(0xFF4A0E12);
+  static const lightBurgundy = Color(0xFFFDF2F4);
+  static const backgroundColor = Color(0xFFFFF4F5);
+  static const textColor = Color(0xFF2D1215);
+  static const borderColor = Color(0xFFE8D0D5);
+  static const secondaryTextColor = Color(0xFF8A6A6D);
+  static const successColor = Color(0xFF2E7D32);
+  static const errorColor = Color(0xFFC62828);
 
   @override
   void initState() {
     super.initState();
-
     if (isEdit) {
       final s = widget.survey!;
-
       titleController.text = s['title']?.toString() ?? '';
       descriptionController.text = s['description']?.toString() ?? '';
       latitudeController.text = s['latitude']?.toString() ?? '';
       longitudeController.text = s['longitude']?.toString() ?? '';
-
-      selectedCategoryId =
-          int.tryParse(s['category_id']?.toString() ?? '');
-
-
-      final oldLatitude = double.tryParse(
-        latitudeController.text.trim(),
-      );
-      final oldLongitude = double.tryParse(
-        longitudeController.text.trim(),
-      );
-
-      if (oldLatitude != null &&
-          oldLongitude != null &&
-          oldLatitude >= -90 &&
-          oldLatitude <= 90 &&
-          oldLongitude >= -180 &&
-          oldLongitude <= 180) {
-        selectedLocation = LatLng(oldLatitude, oldLongitude);
-      }
-
+      selectedCategoryId = int.tryParse(s['category_id']?.toString() ?? '');
+      final oldLat = double.tryParse(latitudeController.text.trim());
+      final oldLng = double.tryParse(longitudeController.text.trim());
+      if (oldLat != null && oldLng != null)
+        selectedLocation = LatLng(oldLat, oldLng);
       final photoName = s['photo']?.toString();
-
       if (photoName != null &&
           photoName.isNotEmpty &&
-          photoName != 'placeholder.jpg') {
+          photoName != 'placeholder.jpg')
         fetchExistingImage(photoName);
-      }
     }
-
     fetchCategories();
   }
 
@@ -114,7 +81,6 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
-
       final response = await http.get(
         Uri.parse('https://sijala.biz.id/api/v1/categories'),
         headers: {
@@ -122,45 +88,32 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
           'Authorization': 'Bearer $token',
         },
       );
-
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
-
         if (decoded is Map && decoded['data'] is List) {
           final List rawList = decoded['data'];
-
           if (!mounted) return;
-
           setState(() {
             categories = rawList
                 .whereType<Map>()
-                .map((item) => Map<String, dynamic>.from(item))
+                .map((e) => Map<String, dynamic>.from(e))
                 .toList();
             isLoadingCategories = false;
           });
-
           return;
         }
       }
     } catch (_) {}
-
-    if (mounted) {
-      setState(() {
-        isLoadingCategories = false;
-      });
-    }
+    if (mounted) setState(() => isLoadingCategories = false);
   }
-
 
   Future<void> fetchExistingImage(String photoName) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
-
       final fileName = photoName.contains('/')
           ? photoName.split('/').last
           : photoName;
-
       final response = await http.get(
         Uri.parse('https://sijala.biz.id/api/image/$fileName'),
         headers: {
@@ -168,14 +121,9 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
           'Authorization': 'Bearer $token',
         },
       );
-
-      if (response.statusCode == 200 &&
-          response.bodyBytes.isNotEmpty) {
+      if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         if (!mounted) return;
-
-        setState(() {
-          existingImageBytes = response.bodyBytes;
-        });
+        setState(() => existingImageBytes = response.bodyBytes);
       }
     } catch (_) {}
   }
@@ -183,105 +131,68 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
   Future<void> pickImage(ImageSource source) async {
     try {
       final picker = ImagePicker();
-
       final pickedFile = await picker.pickImage(
         source: source,
         maxWidth: 1200,
         maxHeight: 1200,
         imageQuality: 85,
       );
-
       if (pickedFile != null) {
         final bytes = await pickedFile.readAsBytes();
-
         if (!mounted) return;
-
         setState(() {
           selectedImage = pickedFile;
           selectedImageBytes = bytes;
         });
       }
     } catch (_) {
-      showErrorSnackBar('Gagal memilih foto.');
+      showSnack('Gagal memilih foto.', errorColor, Icons.error_outline);
     }
   }
-
 
   void selectMapLocation(LatLng point) {
     setState(() {
       selectedLocation = point;
-
       latitudeController.text = point.latitude.toStringAsFixed(7);
       longitudeController.text = point.longitude.toStringAsFixed(7);
     });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Lokasi berhasil dipilih dari peta.'),
-        backgroundColor: primaryColor,
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 2),
-      ),
+    showSnack(
+      'Lokasi berhasil dipilih dari peta.',
+      primaryColor,
+      Icons.location_on,
     );
   }
 
-  
-  Future<void> openGoogleMaps(
-    double latitude,
-    double longitude,
-  ) async {
+  Future<void> openGoogleMaps(double lat, double lng) async {
     final url = Uri.parse(
-      'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude',
+      'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
     );
-
     try {
-      final canOpen = await canLaunchUrl(url);
-
-      if (canOpen) {
-        await launchUrl(
-          url,
-          mode: LaunchMode.externalApplication,
+      if (await canLaunchUrl(url))
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      else
+        showSnack(
+          'Tidak dapat membuka Google Maps.',
+          errorColor,
+          Icons.map_outlined,
         );
-      } else {
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Tidak dapat membuka Google Maps.'),
-          ),
-        );
-      }
     } catch (e) {
-      debugPrint('GOOGLE MAP ERROR: $e');
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Gagal membuka Google Maps.'),
-        ),
-      );
+      showSnack('Gagal membuka Google Maps.', errorColor, Icons.error_outline);
     }
   }
 
-  
-  void removeSelectedImage() {
-    setState(() {
-      selectedImage = null;
-      selectedImageBytes = null;
-      existingImageBytes = null;
-    });
-  }
+  void removeSelectedImage() => setState(() {
+    selectedImage = null;
+    selectedImageBytes = null;
+    existingImageBytes = null;
+  });
 
-  
   void showImageSourceDialog() {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(20),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (ctx) => SafeArea(
         child: Padding(
@@ -290,32 +201,33 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 42,
+                width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: borderColor,
+                  color: Colors.grey.shade300,
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               const Text(
                 'Pilih Sumber Foto',
                 style: TextStyle(
-                  fontSize: 17,
+                  fontSize: 15,
                   fontWeight: FontWeight.bold,
-                  color: textColor,
+                  color: darkBurgundy,
                 ),
               ),
               const SizedBox(height: 12),
               ListTile(
                 leading: const CircleAvatar(
-                  backgroundColor: lightBlue,
+                  backgroundColor: lightBurgundy,
                   child: Icon(
                     Icons.photo_library_outlined,
                     color: primaryColor,
+                    size: 20,
                   ),
                 ),
-                title: const Text('Galeri'),
+                title: const Text('Galeri', style: TextStyle(fontSize: 14)),
                 onTap: () {
                   Navigator.pop(ctx);
                   pickImage(ImageSource.gallery);
@@ -323,13 +235,14 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
               ),
               ListTile(
                 leading: const CircleAvatar(
-                  backgroundColor: lightBlue,
+                  backgroundColor: lightBurgundy,
                   child: Icon(
                     Icons.camera_alt_outlined,
                     color: primaryColor,
+                    size: 20,
                   ),
                 ),
-                title: const Text('Kamera'),
+                title: const Text('Kamera', style: TextStyle(fontSize: 14)),
                 onTap: () {
                   Navigator.pop(ctx);
                   pickImage(ImageSource.camera);
@@ -342,78 +255,52 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
     );
   }
 
-
   Future<void> saveSurvey() async {
     if (!formKey.currentState!.validate()) {
-      showErrorSnackBar(
-        'Lengkapi data yang wajib diisi dengan benar.',
+      showSnack(
+        'Lengkapi data wajib dengan benar.',
+        errorColor,
+        Icons.warning_amber_rounded,
       );
       return;
     }
-
     if (selectedCategoryId == null || selectedCategoryId == 0) {
-      showErrorSnackBar('Kategori survey wajib dipilih.');
+      showSnack('Kategori wajib dipilih.', errorColor, Icons.category_outlined);
       return;
     }
-
     if (selectedImageBytes == null && existingImageBytes == null) {
-      showErrorSnackBar('Foto survey wajib diisi.');
+      showSnack('Foto survey wajib diisi.', errorColor, Icons.image_outlined);
       return;
     }
-
-    setState(() {
-      isSubmitting = true;
-    });
-
+    setState(() => isSubmitting = true);
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
-
       if (token.isEmpty) {
         if (!mounted) return;
-
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(
-            builder: (context) => const LoginPage(),
-          ),
+          MaterialPageRoute(builder: (context) => const LoginPage()),
           (route) => false,
         );
-
         return;
       }
-
-      final uri = Uri.parse(
-        'https://sijala.biz.id/api/v1/surveys/save',
-      );
-
+      final uri = Uri.parse('https://sijala.biz.id/api/v1/surveys/save');
       final request = http.MultipartRequest('POST', uri);
-
       request.headers['Accept'] = 'application/json';
       request.headers['Authorization'] = 'Bearer $token';
-
       request.fields['title'] = titleController.text.trim();
-      request.fields['category_id'] =
-          selectedCategoryId.toString();
-      request.fields['description'] =
-          descriptionController.text.trim();
-
-      if (latitudeController.text.trim().isNotEmpty) {
-        request.fields['latitude'] =
-            latitudeController.text.trim();
-      }
-
-      if (longitudeController.text.trim().isNotEmpty) {
-        request.fields['longitude'] =
-            longitudeController.text.trim();
-      }
-
+      request.fields['category_id'] = selectedCategoryId.toString();
+      request.fields['description'] = descriptionController.text.trim();
+      if (latitudeController.text.trim().isNotEmpty)
+        request.fields['latitude'] = latitudeController.text.trim();
+      if (longitudeController.text.trim().isNotEmpty)
+        request.fields['longitude'] = longitudeController.text.trim();
       if (isEdit) {
         request.fields['id'] = widget.survey!['id'].toString();
         request.fields['_method'] = 'PUT';
       }
-
-      if (selectedImage != null && selectedImageBytes != null) {
+      if (selectedImage != null && selectedImageBytes != null)
         request.files.add(
           http.MultipartFile.fromBytes(
             'photo',
@@ -421,68 +308,61 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
             filename: selectedImage!.name,
           ),
         );
-      }
-
       final streamed = await request.send();
       final response = await http.Response.fromStream(streamed);
-
-      if (response.statusCode == 200 ||
-          response.statusCode == 201) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isEdit
-                  ? 'Survey berhasil diperbarui!'
-                  : 'Survey berhasil disimpan!',
-            ),
-            backgroundColor: primaryColor,
-            behavior: SnackBarBehavior.floating,
-          ),
+        showSnack(
+          isEdit ? 'Survey berhasil diperbarui!' : 'Survey berhasil disimpan!',
+          successColor,
+          Icons.check_circle,
         );
-
         Navigator.pop(context, true);
         return;
       }
-
       if (response.statusCode == 422) {
         final decoded = jsonDecode(response.body);
-        final message =
-            decoded['message'] ?? 'Data yang dikirim tidak valid.';
-
-        throw Exception(message);
+        throw Exception(decoded['message'] ?? 'Data tidak valid.');
       }
-
-      throw Exception(
-        'Gagal menyimpan survey (Kode: ${response.statusCode})',
-      );
+      throw Exception('Gagal menyimpan survey (Kode: ${response.statusCode})');
     } catch (e) {
       if (!mounted) return;
-
-      showErrorSnackBar(
+      showSnack(
         e.toString().replaceFirst('Exception: ', ''),
+        errorColor,
+        Icons.error_outline,
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          isSubmitting = false;
-        });
-      }
+      if (mounted) setState(() => isSubmitting = false);
     }
   }
 
-  
-  void showErrorSnackBar(String msg) {
+  void showSnack(String msg, Color color, IconData icon) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg),
-        backgroundColor: dangerColor,
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                msg,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: color,
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(14),
       ),
     );
   }
-
 
   InputDecoration fieldDecoration({
     required String hint,
@@ -494,162 +374,128 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
       hintText: hint,
       filled: true,
       fillColor: Colors.white,
-      prefixIcon: Icon(icon, color: primaryColor),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 14,
-      ),
+      prefixIcon: Icon(icon, color: primaryColor, size: 20),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: borderColor),
+        borderSide: BorderSide(color: Colors.grey.shade300),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: borderColor),
+        borderSide: BorderSide(color: Colors.grey.shade300),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(
-          color: primaryColor,
-          width: 1.8,
-        ),
+        borderSide: const BorderSide(color: primaryColor, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: dangerColor),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(
-          color: dangerColor,
-          width: 1.5,
-        ),
+        borderSide: const BorderSide(color: errorColor),
       ),
     );
   }
-
 
   Widget sectionCard({
     required IconData icon,
     required String title,
     required Widget child,
   }) {
-    return Card(
-      elevation: 0,
-      color: Colors.white,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: borderColor),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: lightBlue,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(icon, color: primaryColor),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: lightBurgundy,
+                  borderRadius: BorderRadius.circular(9),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
+                child: Icon(icon, color: primaryColor, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: darkBurgundy,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            child,
-          ],
-        ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          child,
+        ],
       ),
     );
   }
 
-
-  Widget fieldLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 7),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: textColor,
-        ),
+  Widget fieldLabel(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: darkBurgundy,
       ),
-    );
-  }
+    ),
+  );
 
   Widget buildLocationMap() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           child: SizedBox(
-            height: 280,
+            height: 260,
             width: double.infinity,
             child: FlutterMap(
               mapController: mapController,
               options: MapOptions(
                 initialCenter: selectedLocation,
                 initialZoom: 15,
-
-                
-                onTap: (tapPosition, point) {
-                  selectMapLocation(point);
-                },
+                onTap: (tap, point) => selectMapLocation(point),
               ),
               children: [
                 TileLayer(
-                  urlTemplate:
-                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.example.field_survey',
                 ),
-
-                
                 MarkerLayer(
                   markers: [
                     Marker(
                       point: selectedLocation,
-                      width: 46,
-                      height: 54,
+                      width: 44,
+                      height: 50,
                       child: const Icon(
                         Icons.location_pin,
                         color: primaryColor,
-                        size: 46,
+                        size: 44,
                       ),
                     ),
                   ],
                 ),
-
-
                 RichAttributionWidget(
                   attributions: [
                     TextSourceAttribution(
                       'OpenStreetMap contributors',
-                      onTap: () {
-                        launchUrl(
-                          Uri.parse(
-                            'https://www.openstreetmap.org/copyright',
-                          ),
-                          mode: LaunchMode.externalApplication,
-                        );
-                      },
+                      onTap: () => launchUrl(
+                        Uri.parse('https://www.openstreetmap.org/copyright'),
+                        mode: LaunchMode.externalApplication,
+                      ),
                     ),
                   ],
                 ),
@@ -658,19 +504,18 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
           ),
         ),
         const SizedBox(height: 10),
-
-  
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
-            onPressed: () {
-              openGoogleMaps(
-                selectedLocation.latitude,
-                selectedLocation.longitude,
-              );
-            },
-            icon: const Icon(Icons.open_in_new),
-            label: const Text('Buka di Google Maps'),
+            onPressed: () => openGoogleMaps(
+              selectedLocation.latitude,
+              selectedLocation.longitude,
+            ),
+            icon: const Icon(Icons.open_in_new, size: 16),
+            label: const Text(
+              'Buka di Google Maps',
+              style: TextStyle(fontSize: 13),
+            ),
             style: OutlinedButton.styleFrom(
               foregroundColor: primaryColor,
               side: const BorderSide(color: primaryColor),
@@ -693,13 +538,15 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
           isEdit ? 'Edit Survey' : 'Tambah Survey',
           style: const TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 18,
+            fontSize: 16,
+            color: Colors.white,
           ),
         ),
         backgroundColor: primaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Form(
         key: formKey,
@@ -708,7 +555,6 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-  
               sectionCard(
                 icon: Icons.assignment_outlined,
                 title: 'Data Utama Survey',
@@ -722,33 +568,28 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                         hint: 'Masukkan judul survey',
                         icon: Icons.title,
                       ),
-                      validator: (val) {
-                        if (val == null || val.trim().isEmpty) {
-                          return 'Judul survey wajib diisi';
-                        }
-                        if (val.trim().length < 3) {
-                          return 'Judul minimal harus 3 karakter';
-                        }
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty)
+                          return 'Judul wajib diisi';
+                        if (v.trim().length < 3) return 'Minimal 3 karakter';
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
-
+                    const SizedBox(height: 14),
                     fieldLabel('Kategori Survey *'),
                     if (isLoadingCategories)
                       const LinearProgressIndicator(
                         color: primaryColor,
-                        backgroundColor: lightBlue,
+                        backgroundColor: lightBurgundy,
                       )
                     else
                       DropdownButtonFormField<int>(
-                        value: categories.any(
-                          (cat) =>
-                              int.tryParse(
-                                cat['id']?.toString() ?? '',
-                              ) ==
-                              selectedCategoryId,
-                        )
+                        value:
+                            categories.any(
+                              (cat) =>
+                                  int.tryParse(cat['id']?.toString() ?? '') ==
+                                  selectedCategoryId,
+                            )
                             ? selectedCategoryId
                             : null,
                         isExpanded: true,
@@ -757,55 +598,41 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                           icon: Icons.category_outlined,
                         ),
                         items: categories.map((cat) {
-                          final id = int.tryParse(
-                                cat['id']?.toString() ?? '',
-                              ) ??
-                              0;
+                          final id =
+                              int.tryParse(cat['id']?.toString() ?? '') ?? 0;
                           final name = cat['name']?.toString() ?? '';
-
                           return DropdownMenuItem<int>(
                             value: id,
                             child: Text(
                               name,
                               overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 13.5),
                             ),
                           );
                         }).toList(),
-                        onChanged: (val) {
-                          setState(() {
-                            selectedCategoryId = val;
-                          });
-                        },
-                        validator: (val) {
-                          if (val == null || val == 0) {
-                            return 'Kategori survey wajib dipilih';
-                          }
-                          return null;
-                        },
+                        onChanged: (val) =>
+                            setState(() => selectedCategoryId = val),
+                        validator: (val) => val == null || val == 0
+                            ? 'Kategori wajib dipilih'
+                            : null,
                       ),
-                    const SizedBox(height: 16),
-
+                    const SizedBox(height: 14),
                     fieldLabel('Deskripsi Survey *'),
                     TextFormField(
                       controller: descriptionController,
                       maxLines: 3,
                       decoration: fieldDecoration(
-                        hint: 'Keterangan atau catatan survey...',
+                        hint: 'Keterangan atau catatan...',
                         icon: Icons.notes_outlined,
                       ),
-                      validator: (val) {
-                        if (val == null || val.trim().isEmpty) {
-                          return 'Deskripsi survey wajib diisi';
-                        }
-                        return null;
-                      },
+                      validator: (v) => v == null || v.trim().isEmpty
+                          ? 'Deskripsi wajib diisi'
+                          : null,
                     ),
                   ],
                 ),
               ),
-
-              const SizedBox(height: 16),
-
+              const SizedBox(height: 14),
               sectionCard(
                 icon: Icons.photo_camera_outlined,
                 title: 'Foto Survey *',
@@ -814,15 +641,15 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                     if (selectedImageBytes != null ||
                         existingImageBytes != null) ...[
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                         child: Image.memory(
                           selectedImageBytes ?? existingImageBytes!,
-                          height: 190,
+                          height: 180,
                           width: double.infinity,
                           fit: BoxFit.cover,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       Row(
                         children: [
                           Expanded(
@@ -830,16 +657,17 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                               onPressed: showImageSourceDialog,
                               icon: const Icon(
                                 Icons.photo_library_outlined,
+                                size: 18,
                               ),
-                              label: const Text('Ganti Foto'),
+                              label: const Text(
+                                'Ganti',
+                                style: TextStyle(fontSize: 13),
+                              ),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: primaryColor,
-                                side: const BorderSide(
-                                  color: primaryColor,
-                                ),
+                                side: const BorderSide(color: primaryColor),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius.circular(10),
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
                               ),
                             ),
@@ -847,16 +675,18 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                           const SizedBox(width: 8),
                           OutlinedButton.icon(
                             onPressed: removeSelectedImage,
-                            icon: const Icon(Icons.delete_outline),
-                            label: const Text('Hapus'),
+                            icon: const Icon(Icons.delete_outline, size: 18),
+                            label: const Text(
+                              'Hapus',
+                              style: TextStyle(fontSize: 13),
+                            ),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: dangerColor,
-                              side: const BorderSide(
-                                color: Color(0xFFFECACA),
+                              foregroundColor: errorColor,
+                              side: BorderSide(
+                                color: errorColor.withOpacity(0.3),
                               ),
                               shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(10),
                               ),
                             ),
                           ),
@@ -865,40 +695,38 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                     ] else
                       InkWell(
                         onTap: showImageSourceDialog,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                         child: Container(
-                          height: 140,
+                          height: 130,
                           width: double.infinity,
                           decoration: BoxDecoration(
-                            color: backgroundColor,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: borderColor,
-                              width: 1.3,
-                            ),
+                            color: lightBurgundy,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: borderColor),
                           ),
-                          child: const Column(
+                          child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
                                 Icons.add_a_photo_outlined,
-                                size: 38,
-                                color: primaryColor,
+                                size: 32,
+                                color: Colors.grey.shade500,
                               ),
-                              SizedBox(height: 10),
+                              const SizedBox(height: 8),
                               Text(
                                 'Ketuk untuk memilih foto *',
                                 style: TextStyle(
-                                  color: secondaryTextColor,
+                                  color: Colors.grey.shade600,
                                   fontWeight: FontWeight.w500,
+                                  fontSize: 12.5,
                                 ),
                               ),
-                              SizedBox(height: 4),
+                              const SizedBox(height: 2),
                               Text(
                                 'Galeri atau kamera',
                                 style: TextStyle(
-                                  color: secondaryTextColor,
-                                  fontSize: 12,
+                                  color: Colors.grey.shade500,
+                                  fontSize: 11,
                                 ),
                               ),
                             ],
@@ -908,10 +736,7 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                   ],
                 ),
               ),
-
-              const SizedBox(height: 16),
-
-        
+              const SizedBox(height: 14),
               sectionCard(
                 icon: Icons.location_on_outlined,
                 title: 'Lokasi Survey',
@@ -919,24 +744,19 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Pilih lokasi survey langsung melalui peta.',
+                      'Pilih lokasi langsung melalui peta.',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11.5,
                         color: secondaryTextColor,
                       ),
                     ),
-                    const SizedBox(height: 14),
-
-                
+                    const SizedBox(height: 12),
                     buildLocationMap(),
-
-                    const SizedBox(height: 18),
-
+                    const SizedBox(height: 16),
                     fieldLabel('Latitude *'),
                     TextFormField(
                       controller: latitudeController,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(
+                      keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                         signed: true,
                       ),
@@ -944,50 +764,28 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                         hint: '-7.3274000',
                         icon: Icons.my_location_outlined,
                       ),
-                      validator: (val) {
-                        if (val == null || val.trim().isEmpty) {
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty)
                           return 'Latitude wajib diisi';
-                        }
-
-                        final value = double.tryParse(val.trim());
-
-                        if (value == null ||
-                            value < -90 ||
-                            value > 90) {
-                          return 'Latitude harus antara -90 dan 90';
-                        }
-
+                        final val = double.tryParse(v.trim());
+                        if (val == null || val < -90 || val > 90)
+                          return 'Harus -90 sampai 90';
                         return null;
                       },
-                      onChanged: (value) {
-                        final latitude =
-                            double.tryParse(value.trim());
-                        final longitude = double.tryParse(
+                      onChanged: (val) {
+                        final lat = double.tryParse(val.trim());
+                        final lng = double.tryParse(
                           longitudeController.text.trim(),
                         );
-
-                        if (latitude != null &&
-                            longitude != null &&
-                            latitude >= -90 &&
-                            latitude <= 90 &&
-                            longitude >= -180 &&
-                            longitude <= 180) {
-                          setState(() {
-                            selectedLocation = LatLng(
-                              latitude,
-                              longitude,
-                            );
-                          });
-                        }
+                        if (lat != null && lng != null)
+                          setState(() => selectedLocation = LatLng(lat, lng));
                       },
                     ),
-                    const SizedBox(height: 14),
-
+                    const SizedBox(height: 12),
                     fieldLabel('Longitude *'),
                     TextFormField(
                       controller: longitudeController,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(
+                      keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                         signed: true,
                       ),
@@ -995,58 +793,35 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                         hint: '108.2207000',
                         icon: Icons.explore_outlined,
                       ),
-                      validator: (val) {
-                        if (val == null || val.trim().isEmpty) {
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty)
                           return 'Longitude wajib diisi';
-                        }
-
-                        final value = double.tryParse(val.trim());
-
-                        if (value == null ||
-                            value < -180 ||
-                            value > 180) {
-                          return 'Longitude harus antara -180 dan 180';
-                        }
-
+                        final val = double.tryParse(v.trim());
+                        if (val == null || val < -180 || val > 180)
+                          return 'Harus -180 sampai 180';
                         return null;
                       },
-                      onChanged: (value) {
-                        final latitude = double.tryParse(
+                      onChanged: (val) {
+                        final lat = double.tryParse(
                           latitudeController.text.trim(),
                         );
-                        final longitude =
-                            double.tryParse(value.trim());
-
-                        if (latitude != null &&
-                            longitude != null &&
-                            latitude >= -90 &&
-                            latitude <= 90 &&
-                            longitude >= -180 &&
-                            longitude <= 180) {
-                          setState(() {
-                            selectedLocation = LatLng(
-                              latitude,
-                              longitude,
-                            );
-                          });
-                        }
+                        final lng = double.tryParse(val.trim());
+                        if (lat != null && lng != null)
+                          setState(() => selectedLocation = LatLng(lat, lng));
                       },
                     ),
                   ],
                 ),
               ),
-
-              const SizedBox(height: 24),
-
-            
+              const SizedBox(height: 22),
               SizedBox(
-                height: 50,
+                height: 48,
                 child: ElevatedButton.icon(
                   onPressed: isSubmitting ? null : saveSurvey,
                   icon: isSubmitting
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
+                          width: 18,
+                          height: 18,
                           child: CircularProgressIndicator(
                             color: Colors.white,
                             strokeWidth: 2,
@@ -1056,32 +831,31 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                           isEdit
                               ? Icons.save_outlined
                               : Icons.check_circle_outline,
+                          size: 20,
                         ),
                   label: Text(
                     isSubmitting
                         ? 'Menyimpan...'
                         : isEdit
-                            ? 'Simpan Perubahan'
-                            : 'Simpan Survey',
+                        ? 'Simpan Perubahan'
+                        : 'Simpan Survey',
                     style: const TextStyle(
-                      fontSize: 15,
+                      fontSize: 14,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primaryColor,
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor:
-                        primaryColor.withOpacity(0.6),
-                    elevation: 2,
+                    disabledBackgroundColor: primaryColor.withOpacity(0.6),
+                    elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
               ),
-
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
             ],
           ),
         ),

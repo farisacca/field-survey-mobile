@@ -1,37 +1,35 @@
 import 'dart:convert';
 import 'dart:typed_data';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:field_survey/routes/app_routes.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
-
   @override
   State<ProfilePage> createState() => _ProfilePageState();
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  static const Color primaryColor = Color(0xFF1976D2);
-  static const Color backgroundColor = Color(0xFFF5F9FF);
-  static const Color lightBlue = Color(0xFFE3F0FF);
-
+  // THEME BURGUNDY
+  static const primaryColor = Color(0xFF800020);
+  static const darkBurgundy = Color(0xFF4A0E12);
+  static const backgroundColor = Color(0xFFFFF4F5);
+  static const lightBurgundy = Color(0xFFFDF2F4);
+  static const successColor = Color(0xFF2E7D32);
+  static const errorColor = Color(0xFFC62828);
 
   static const String baseUrl = 'https://sijala.biz.id/api/v1';
   static const String profileUrl = '$baseUrl/profile';
   static const String updateProfileUrl = '$baseUrl/profile/update';
   static const String logoutUrl = '$baseUrl/logout';
 
-
   bool isLoading = true;
   bool isSaving = false;
   bool isUploadingPhoto = false;
-
 
   String name = '-';
   String username = '-';
@@ -40,10 +38,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String gender = '-';
   String birthPlace = '-';
   String birthDate = '-';
-
   String? photoName;
-
-
   Uint8List? profileImage;
   Uint8List? selectedPhoto;
 
@@ -53,21 +48,32 @@ class _ProfilePageState extends State<ProfilePage> {
     getProfile();
   }
 
-
   Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('token');
   }
 
-
-  void showMessage(String message, Color color) {
+  void showMessage(String message, Color color, IconData icon) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text(message),
+          content: Row(
+            children: [
+              Icon(icon, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
           backgroundColor: color,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -78,419 +84,275 @@ class _ProfilePageState extends State<ProfilePage> {
       );
   }
 
-  // AMBIL PROFIL
   Future<void> getProfile() async {
     try {
-      if (mounted) {
-        setState(() => isLoading = true);
-      }
-
+      if (mounted) setState(() => isLoading = true);
       final token = await getToken();
-
       if (token == null || token.isEmpty) {
         if (!mounted) return;
-
         setState(() => isLoading = false);
         showMessage(
-          'Token tidak ditemukan. Silakan login kembali.',
-          Colors.red,
+          'Token tidak ditemukan. Login kembali.',
+          errorColor,
+          Icons.error_outline,
         );
         return;
       }
-
-      final response = await http.get(
-        Uri.parse(profileUrl),
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      ).timeout(const Duration(seconds: 30));
-
+      final response = await http
+          .get(
+            Uri.parse(profileUrl),
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 30));
       dynamic result;
-
       try {
         result = jsonDecode(response.body);
       } catch (_) {
         result = {};
       }
-
-      // TOKEN KEDALUWARSA
       if (response.statusCode == 401) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove('token');
         await prefs.remove('user');
-
         if (!mounted) return;
-
-        showMessage('Sesi login telah berakhir.', Colors.red);
+        showMessage(
+          'Sesi login berakhir.',
+          errorColor,
+          Icons.warning_amber_rounded,
+        );
         context.go(AppRoutes.login);
         return;
       }
-
       if (response.statusCode == 200) {
-        dynamic profileData;
-
-        if (result is Map) {
-          profileData = result['data'] is Map
-              ? result['data']
-              : result;
-        }
-
+        dynamic profileData = result is Map
+            ? (result['data'] is Map ? result['data'] : result)
+            : null;
         if (profileData is Map) {
           final data = Map<String, dynamic>.from(profileData);
-
-          final newName = data['name']?.toString() ?? '-';
-          final newUsername = data['username']?.toString() ?? '-';
-          final newEmail = data['email']?.toString() ?? '-';
-          final newPhone = data['phone']?.toString() ?? '-';
-
-          final newBirthPlace =
-              data['birth_place']?.toString() ??
-              data['birthPlace']?.toString() ??
-              '-';
-
-          final newBirthDate =
-              data['birth_date']?.toString() ??
-              data['birthDate']?.toString() ??
-              '-';
-
           String newGender = '-';
-          final genderValue = data['gender']?.toString();
-
-          if (genderValue == 'L') {
+          final gv = data['gender']?.toString();
+          if (gv == 'L')
             newGender = 'Laki-laki';
-          } else if (genderValue == 'P') {
+          else if (gv == 'P')
             newGender = 'Perempuan';
-          } else if (genderValue != null &&
-              genderValue.isNotEmpty) {
-            newGender = genderValue;
-          }
-
-          String? newPhoto;
-
-          if (data['photo'] != null) {
-            final value = data['photo'].toString();
-
-            if (value.isNotEmpty && value != 'null') {
-              newPhoto = value;
-            }
-          }
-
+          else if (gv != null && gv.isNotEmpty)
+            newGender = gv;
+          String? newPhoto = data['photo']?.toString();
+          if (newPhoto == 'null' || newPhoto?.isEmpty == true) newPhoto = null;
           if (!mounted) return;
-
           setState(() {
-            name = newName;
-            username = newUsername;
-            email = newEmail;
-            phone = newPhone;
+            name = data['name']?.toString() ?? '-';
+            username = data['username']?.toString() ?? '-';
+            email = data['email']?.toString() ?? '-';
+            phone = data['phone']?.toString() ?? '-';
+            birthPlace =
+                data['birth_place']?.toString() ??
+                data['birthPlace']?.toString() ??
+                '-';
+            birthDate =
+                data['birth_date']?.toString() ??
+                data['birthDate']?.toString() ??
+                '-';
             gender = newGender;
-            birthPlace = newBirthPlace;
-            birthDate = newBirthDate;
             photoName = newPhoto;
           });
-
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('user', jsonEncode(data));
-
-          if (newPhoto != null) {
+          if (newPhoto != null)
             await loadProfileImage(newPhoto);
-          } else {
-            await loadSavedPhoto(newEmail);
-          }
+          else
+            await loadSavedPhoto(email);
         }
       } else {
         final message = result is Map && result['message'] != null
             ? result['message'].toString()
-            : 'Gagal mengambil data profil';
-
-        if (mounted) {
-          showMessage(message, Colors.red);
-        }
-
+            : 'Gagal mengambil profil';
+        showMessage(message, errorColor, Icons.error_outline);
         await loadSavedPhoto(email);
       }
     } catch (e) {
-      debugPrint('ERROR GET PROFILE: $e');
-
       await loadSavedPhoto(email);
-
-      if (mounted) {
-        showMessage(
-          'Tidak dapat terhubung ke server.',
-          Colors.red,
-        );
-      }
+      showMessage(
+        'Tidak dapat terhubung ke server.',
+        errorColor,
+        Icons.wifi_off_rounded,
+      );
     } finally {
-      if (mounted) {
-        setState(() => isLoading = false);
-      }
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
-  // AMBIL FOTO DARI SERVER
   Future<void> loadProfileImage(String fileName) async {
     try {
       final token = await getToken();
-
       if (token == null || token.isEmpty) return;
-
-      final response = await http.get(
-        Uri.parse('https://sijala.biz.id/api/image/$fileName'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': '*/*',
-        },
-      ).timeout(const Duration(seconds: 30));
-
-      if (response.statusCode == 200 &&
-          response.bodyBytes.isNotEmpty) {
+      final response = await http
+          .get(
+            Uri.parse('https://sijala.biz.id/api/image/$fileName'),
+            headers: {'Authorization': 'Bearer $token', 'Accept': '*/*'},
+          )
+          .timeout(const Duration(seconds: 30));
+      if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         final prefs = await SharedPreferences.getInstance();
-        final key = 'profile_photo_${email.toLowerCase()}';
-
         await prefs.setString(
-          key,
+          'profile_photo_${email.toLowerCase()}',
           base64Encode(response.bodyBytes),
         );
-
         if (!mounted) return;
-
-        setState(() {
-          profileImage = response.bodyBytes;
-        });
+        setState(() => profileImage = response.bodyBytes);
       } else {
         await loadSavedPhoto(email);
       }
     } catch (e) {
-      debugPrint('ERROR LOAD IMAGE: $e');
       await loadSavedPhoto(email);
     }
   }
 
-  // AMBIL FOTO TERSIMPAN
   Future<void> loadSavedPhoto(String userEmail) async {
     try {
       if (userEmail.isEmpty || userEmail == '-') return;
-
       final prefs = await SharedPreferences.getInstance();
-      final key = 'profile_photo_${userEmail.toLowerCase()}';
-      final savedPhoto = prefs.getString(key);
-
+      final savedPhoto = prefs.getString(
+        'profile_photo_${userEmail.toLowerCase()}',
+      );
       if (savedPhoto == null || savedPhoto.isEmpty) return;
-
       final bytes = base64Decode(savedPhoto);
-
       if (!mounted) return;
-
-      setState(() {
-        profileImage = bytes;
-      });
+      setState(() => profileImage = bytes);
     } catch (e) {
       debugPrint('ERROR LOAD SAVED PHOTO: $e');
     }
   }
 
-  // PILIH FOTO
   Future<void> pickPhoto() async {
     if (isUploadingPhoto) return;
-
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.image,
         withData: true,
       );
-
       if (result == null) return;
-
       final file = result.files.single;
-
       if (file.bytes == null) {
-        showMessage(
-          'File gambar tidak bisa dibaca.',
-          Colors.red,
-        );
+        showMessage('File tidak bisa dibaca.', errorColor, Icons.error_outline);
         return;
       }
-
       if (!mounted) return;
-
       setState(() {
         selectedPhoto = file.bytes;
         profileImage = file.bytes;
       });
-
       await uploadPhoto(file.bytes!, file.name);
     } catch (e) {
-      debugPrint('ERROR PICK PHOTO: $e');
-      showMessage('Gagal memilih foto.', Colors.red);
+      showMessage('Gagal memilih foto.', errorColor, Icons.error_outline);
     }
   }
 
-  // UPLOAD FOTO
-  Future<void> uploadPhoto(
-    Uint8List bytes,
-    String fileName,
-  ) async {
+  Future<void> uploadPhoto(Uint8List bytes, String fileName) async {
     try {
       if (mounted) setState(() => isUploadingPhoto = true);
-
       final token = await getToken();
-
       if (token == null || token.isEmpty) {
-        showMessage('Token tidak ditemukan.', Colors.red);
+        showMessage('Token tidak ditemukan.', errorColor, Icons.error_outline);
         return;
       }
-
       final request = http.MultipartRequest(
         'POST',
         Uri.parse(updateProfileUrl),
       );
-
       request.headers['Accept'] = 'application/json';
       request.headers['Authorization'] = 'Bearer $token';
-
-      if (name != '-' && name.isNotEmpty) {
-        request.fields['name'] = name;
-      }
-      if (username != '-' && username.isNotEmpty) {
-        request.fields['username'] = username;
-      }
-      if (email != '-' && email.isNotEmpty) {
-        request.fields['email'] = email;
-      }
-      if (phone != '-' && phone.isNotEmpty) {
-        request.fields['phone'] = phone;
-      }
-      if (birthPlace != '-' && birthPlace.isNotEmpty) {
-        request.fields['birth_place'] = birthPlace;
-      }
-      if (birthDate != '-' && birthDate.isNotEmpty) {
-        request.fields['birth_date'] = birthDate;
-      }
-
-      if (gender == 'Laki-laki' || gender == 'Laki Laki') {
+      if (name != '-') request.fields['name'] = name;
+      if (username != '-') request.fields['username'] = username;
+      if (email != '-') request.fields['email'] = email;
+      if (phone != '-') request.fields['phone'] = phone;
+      if (birthPlace != '-') request.fields['birth_place'] = birthPlace;
+      if (birthDate != '-') request.fields['birth_date'] = birthDate;
+      if (gender == 'Laki-laki')
         request.fields['gender'] = 'L';
-      } else if (gender == 'Perempuan') {
+      else if (gender == 'Perempuan')
         request.fields['gender'] = 'P';
-      }
-
       request.files.add(
-        http.MultipartFile.fromBytes(
-          'photo',
-          bytes,
-          filename: fileName,
-        ),
+        http.MultipartFile.fromBytes('photo', bytes, filename: fileName),
       );
-
       final streamedResponse = await request.send().timeout(
         const Duration(seconds: 30),
       );
-
-      final response = await http.Response.fromStream(
-        streamedResponse,
-      );
-
+      final response = await http.Response.fromStream(streamedResponse);
       dynamic result;
-
       try {
         result = jsonDecode(response.body);
       } catch (_) {
         result = {};
       }
-
-      if (response.statusCode >= 200 &&
-          response.statusCode < 300) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         String? newPhotoName;
-
         if (result is Map) {
-          if (result['photo'] != null) {
+          if (result['photo'] != null)
             newPhotoName = result['photo'].toString();
-          } else if (result['data'] is Map &&
-              result['data']['photo'] != null) {
+          else if (result['data'] is Map && result['data']['photo'] != null)
             newPhotoName = result['data']['photo'].toString();
-          }
         }
-
         final prefs = await SharedPreferences.getInstance();
-        final key = 'profile_photo_${email.toLowerCase()}';
-
-        await prefs.setString(key, base64Encode(bytes));
-
+        await prefs.setString(
+          'profile_photo_${email.toLowerCase()}',
+          base64Encode(bytes),
+        );
         if (newPhotoName != null && newPhotoName.isNotEmpty) {
           photoName = newPhotoName;
-
           await prefs.setString(
             'profile_photo_name_${email.toLowerCase()}',
             newPhotoName,
           );
         }
-
         if (!mounted) return;
-
-        setState(() {
-          profileImage = bytes;
-        });
-
+        setState(() => profileImage = bytes);
         showMessage(
           'Foto profil berhasil diperbarui.',
-          Colors.green,
+          successColor,
+          Icons.check_circle,
         );
       } else {
         final message = result is Map && result['message'] != null
             ? result['message'].toString()
-            : 'Gagal mengupload foto.';
-
-        showMessage(message, Colors.red);
+            : 'Gagal upload foto.';
+        showMessage(message, errorColor, Icons.error_outline);
       }
     } catch (e) {
-      debugPrint('ERROR UPLOAD PHOTO: $e');
-      showMessage('Gagal mengupload foto.', Colors.red);
+      showMessage('Gagal upload foto.', errorColor, Icons.error_outline);
     } finally {
-      if (mounted) {
+      if (mounted)
         setState(() {
           isUploadingPhoto = false;
           selectedPhoto = null;
         });
-      }
     }
   }
 
-  // EDIT PROFIL
   Future<void> editProfile() async {
-    final nameController = TextEditingController(
-      text: name == '-' ? '' : name,
-    );
-
-    final usernameController = TextEditingController(
+    final nameC = TextEditingController(text: name == '-' ? '' : name);
+    final usernameC = TextEditingController(
       text: username == '-' ? '' : username,
     );
-
-    final emailController = TextEditingController(
-      text: email == '-' ? '' : email,
-    );
-
-    final phoneController = TextEditingController(
-      text: phone == '-' ? '' : phone,
-    );
-
-    final birthPlaceController = TextEditingController(
+    final emailC = TextEditingController(text: email == '-' ? '' : email);
+    final phoneC = TextEditingController(text: phone == '-' ? '' : phone);
+    final birthPlaceC = TextEditingController(
       text: birthPlace == '-' ? '' : birthPlace,
     );
-
-    final birthDateController = TextEditingController(
+    final birthDateC = TextEditingController(
       text: birthDate == '-' ? '' : birthDate,
     );
-
-    String selectedGender =
-        gender == 'Perempuan' ? 'Perempuan' : 'Laki-laki';
+    String selectedGender = gender == 'Perempuan' ? 'Perempuan' : 'Laki-laki';
 
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(25),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (modalContext) {
         return StatefulBuilder(
@@ -508,80 +370,66 @@ class _ProfilePageState extends State<ProfilePage> {
                   children: [
                     Center(
                       child: Container(
-                        width: 45,
-                        height: 5,
+                        width: 40,
+                        height: 4,
                         decoration: BoxDecoration(
                           color: Colors.grey.shade300,
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
                     ),
-
-                    const SizedBox(height: 22),
-
+                    const SizedBox(height: 20),
                     const Text(
                       'Edit Profil',
                       style: TextStyle(
-                        fontSize: 23,
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: primaryColor,
+                        color: darkBurgundy,
                       ),
                     ),
-
-                    const SizedBox(height: 5),
-
-                    const Text(
+                    const SizedBox(height: 4),
+                    Text(
                       'Perbarui informasi profil kamu',
                       style: TextStyle(
-                        color: Colors.grey,
+                        color: Colors.grey.shade600,
                         fontSize: 13,
                       ),
                     ),
-
-                    const SizedBox(height: 22),
-
+                    const SizedBox(height: 20),
                     TextField(
-                      controller: nameController,
+                      controller: nameC,
                       decoration: inputDecoration(
                         'Nama',
                         Icons.person_outline_rounded,
                       ),
                     ),
-
-                    const SizedBox(height: 15),
-
+                    const SizedBox(height: 14),
                     TextField(
-                      controller: usernameController,
+                      controller: usernameC,
                       decoration: inputDecoration(
                         'Username',
                         Icons.alternate_email_rounded,
                       ),
                     ),
-
-                    const SizedBox(height: 15),
-
+                    const SizedBox(height: 14),
                     TextField(
-                      controller: emailController,
+                      controller: emailC,
                       keyboardType: TextInputType.emailAddress,
                       decoration: inputDecoration(
                         'Email',
                         Icons.email_outlined,
                       ),
                     ),
-
-                    const SizedBox(height: 15),
-
+                    const SizedBox(height: 14),
                     TextField(
-                      controller: phoneController,
+                      controller: phoneC,
                       keyboardType: TextInputType.phone,
                       decoration: inputDecoration(
                         'Nomor HP',
                         Icons.phone_outlined,
                       ),
                     ),
-
-                    const SizedBox(height: 15),
-
+                    const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
                       value: selectedGender,
                       decoration: inputDecoration(
@@ -598,89 +446,67 @@ class _ProfilePageState extends State<ProfilePage> {
                           child: Text('Perempuan'),
                         ),
                       ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setModalState(() {
-                            selectedGender = value;
-                          });
-                        }
+                      onChanged: (v) {
+                        if (v != null) setModalState(() => selectedGender = v);
                       },
                     ),
-
-                    const SizedBox(height: 15),
-
+                    const SizedBox(height: 14),
                     TextField(
-                      controller: birthPlaceController,
+                      controller: birthPlaceC,
                       decoration: inputDecoration(
                         'Tempat Lahir',
                         Icons.location_city_outlined,
                       ),
                     ),
-
-                    const SizedBox(height: 15),
-
+                    const SizedBox(height: 14),
                     TextField(
-                      controller: birthDateController,
+                      controller: birthDateC,
                       decoration: inputDecoration(
                         'Tanggal Lahir (YYYY-MM-DD)',
                         Icons.calendar_month_outlined,
                       ),
                     ),
-
-                    const SizedBox(height: 25),
-
+                    const SizedBox(height: 22),
                     SizedBox(
                       width: double.infinity,
-                      height: 52,
+                      height: 50,
                       child: ElevatedButton(
                         onPressed: isSaving
                             ? null
                             : () async {
-                                final newName = nameController.text.trim();
-                                final newUsername = usernameController.text.trim();
-                                final newEmail = emailController.text.trim();
-                                final newPhone = phoneController.text.trim();
-                                final newBirthPlace = birthPlaceController.text.trim();
-                                final newBirthDate = birthDateController.text.trim();
-
-                                if (newName.isEmpty) {
+                                if (nameC.text.trim().isEmpty) {
                                   showMessage(
                                     'Nama wajib diisi.',
-                                    Colors.red,
+                                    errorColor,
+                                    Icons.error_outline,
                                   );
                                   return;
                                 }
-
-                                if (Navigator.canPop(modalContext)) {
+                                if (Navigator.canPop(modalContext))
                                   Navigator.pop(modalContext);
-                                }
-
-                                await Future.delayed(const Duration(milliseconds: 100));
-
+                                await Future.delayed(
+                                  const Duration(milliseconds: 100),
+                                );
                                 await updateProfile(
-                                  newName: newName,
-                                  newUsername: newUsername,
-                                  newEmail: newEmail,
-                                  newPhone: newPhone,
+                                  newName: nameC.text.trim(),
+                                  newUsername: usernameC.text.trim(),
+                                  newEmail: emailC.text.trim(),
+                                  newPhone: phoneC.text.trim(),
                                   newGender: selectedGender,
-                                  newBirthPlace: newBirthPlace,
-                                  newBirthDate: newBirthDate,
+                                  newBirthPlace: birthPlaceC.text.trim(),
+                                  newBirthDate: birthDateC.text.trim(),
                                 );
                               },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primaryColor,
                           foregroundColor: Colors.white,
-                          elevation: 0,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
                         child: const Text(
                           'Simpan Perubahan',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -692,47 +518,35 @@ class _ProfilePageState extends State<ProfilePage> {
         );
       },
     );
-
-    nameController.dispose();
-    usernameController.dispose();
-    emailController.dispose();
-    phoneController.dispose();
-    birthPlaceController.dispose();
-    birthDateController.dispose();
+    nameC.dispose();
+    usernameC.dispose();
+    emailC.dispose();
+    phoneC.dispose();
+    birthPlaceC.dispose();
+    birthDateC.dispose();
   }
 
-  // DEKORASI INPUT
-  InputDecoration inputDecoration(
-    String label,
-    IconData icon,
-  ) {
+  InputDecoration inputDecoration(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
-      prefixIcon: Icon(
-        icon,
-        color: primaryColor,
-      ),
+      prefixIcon: Icon(icon, color: primaryColor, size: 20),
       filled: true,
-      fillColor: lightBlue,
+      fillColor: lightBurgundy,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15),
-        borderSide: BorderSide.none,
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade200),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15),
-        borderSide: BorderSide.none,
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade200),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15),
-        borderSide: const BorderSide(
-          color: primaryColor,
-          width: 1.5,
-        ),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: primaryColor, width: 1.2),
       ),
     );
   }
 
-  // UPDATE PROFIL
   Future<void> updateProfile({
     required String newName,
     required String newUsername,
@@ -744,22 +558,17 @@ class _ProfilePageState extends State<ProfilePage> {
   }) async {
     try {
       if (mounted) setState(() => isSaving = true);
-
       final token = await getToken();
-
       if (token == null || token.isEmpty) {
-        showMessage('Token tidak ditemukan.', Colors.red);
+        showMessage('Token tidak ditemukan.', errorColor, Icons.error_outline);
         return;
       }
-
       final request = http.MultipartRequest(
         'POST',
         Uri.parse(updateProfileUrl),
       );
-
       request.headers['Accept'] = 'application/json';
       request.headers['Authorization'] = 'Bearer $token';
-
       request.fields['name'] = newName;
       request.fields['username'] = newUsername;
       request.fields['email'] = newEmail;
@@ -767,27 +576,18 @@ class _ProfilePageState extends State<ProfilePage> {
       request.fields['gender'] = newGender == 'Perempuan' ? 'P' : 'L';
       request.fields['birth_place'] = newBirthPlace;
       request.fields['birth_date'] = newBirthDate;
-
       final streamedResponse = await request.send().timeout(
         const Duration(seconds: 30),
       );
-
-      final response = await http.Response.fromStream(
-        streamedResponse,
-      );
-
+      final response = await http.Response.fromStream(streamedResponse);
       dynamic result;
-
       try {
         result = jsonDecode(response.body);
       } catch (_) {
         result = {};
       }
-
-      if (response.statusCode >= 200 &&
-          response.statusCode < 300) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         if (!mounted) return;
-
         setState(() {
           name = newName;
           username = newUsername;
@@ -797,22 +597,15 @@ class _ProfilePageState extends State<ProfilePage> {
           birthPlace = newBirthPlace;
           birthDate = newBirthDate;
         });
-
         final prefs = await SharedPreferences.getInstance();
-        final oldUser = prefs.getString('user');
-
         Map<String, dynamic> userMap = {};
-
+        final oldUser = prefs.getString('user');
         if (oldUser != null && oldUser.isNotEmpty) {
           try {
-            final decoded = jsonDecode(oldUser);
-
-            if (decoded is Map) {
-              userMap = Map<String, dynamic>.from(decoded);
-            }
+            final d = jsonDecode(oldUser);
+            if (d is Map) userMap = Map<String, dynamic>.from(d);
           } catch (_) {}
         }
-
         userMap['name'] = newName;
         userMap['username'] = newUsername;
         userMap['email'] = newEmail;
@@ -820,71 +613,66 @@ class _ProfilePageState extends State<ProfilePage> {
         userMap['gender'] = newGender == 'Perempuan' ? 'P' : 'L';
         userMap['birth_place'] = newBirthPlace;
         userMap['birth_date'] = newBirthDate;
-
-        if (photoName != null) {
-          userMap['photo'] = photoName;
-        }
-
+        if (photoName != null) userMap['photo'] = photoName;
         await prefs.setString('user', jsonEncode(userMap));
-
         showMessage(
           'Profil berhasil diperbarui.',
-          Colors.green,
+          successColor,
+          Icons.check_circle,
         );
       } else {
         final message = result is Map && result['message'] != null
             ? result['message'].toString()
             : 'Gagal memperbarui profil.';
-
-        showMessage(message, Colors.red);
+        showMessage(message, errorColor, Icons.error_outline);
       }
     } catch (e) {
-      debugPrint('ERROR UPDATE PROFILE: $e');
-
       showMessage(
         'Tidak dapat terhubung ke server.',
-        Colors.red,
+        errorColor,
+        Icons.wifi_off_rounded,
       );
     } finally {
-      if (mounted) {
-        setState(() => isSaving = false);
-      }
+      if (mounted) setState(() => isSaving = false);
     }
   }
 
-  // LOGOUT
   Future<void> logout() async {
     final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(16),
           ),
           title: const Text(
             'Konfirmasi Logout',
-            style: TextStyle(fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: darkBurgundy,
+            ),
           ),
           content: const Text(
-            'Apakah Anda yakin ingin keluar dari akun?',
+            'Yakin ingin keluar dari akun?',
+            style: TextStyle(fontSize: 14),
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, false);
-              },
-              child: const Text(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(
                 'Batal',
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(color: Colors.grey.shade600),
               ),
             ),
             ElevatedButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, true);
-              },
+              onPressed: () => Navigator.pop(dialogContext, true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
+                backgroundColor: errorColor,
                 foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
               child: const Text('Keluar'),
             ),
@@ -892,74 +680,54 @@ class _ProfilePageState extends State<ProfilePage> {
         );
       },
     );
-
     if (result != true) return;
-
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
-
       if (token != null && token.isNotEmpty) {
         try {
-          await http.post(
-            Uri.parse(logoutUrl),
-            headers: {
-              'Accept': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-          ).timeout(const Duration(seconds: 30));
-        } catch (e) {
-          debugPrint('ERROR LOGOUT API: $e');
-        }
+          await http
+              .post(
+                Uri.parse(logoutUrl),
+                headers: {
+                  'Accept': 'application/json',
+                  'Authorization': 'Bearer $token',
+                },
+              )
+              .timeout(const Duration(seconds: 30));
+        } catch (_) {}
       }
-
       await prefs.remove('token');
       await prefs.remove('user');
-
       if (!mounted) return;
-
       context.go(AppRoutes.login);
     } catch (e) {
-      debugPrint('ERROR LOGOUT: $e');
-
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('token');
       await prefs.remove('user');
-
       if (!mounted) return;
-
       context.go(AppRoutes.login);
     }
   }
 
-  // WIDGET FOTO PROFIL
   Widget profileImageWidget() {
-    if (selectedPhoto != null) {
+    if (selectedPhoto != null)
       return CircleAvatar(
-        radius: 43,
+        radius: 42,
         backgroundImage: MemoryImage(selectedPhoto!),
       );
-    }
-
-    if (profileImage != null) {
+    if (profileImage != null)
       return CircleAvatar(
-        radius: 43,
+        radius: 42,
         backgroundImage: MemoryImage(profileImage!),
       );
-    }
-
     return const CircleAvatar(
-      radius: 43,
+      radius: 42,
       backgroundColor: Colors.white,
-      child: Icon(
-        Icons.person_rounded,
-        size: 45,
-        color: primaryColor,
-      ),
+      child: Icon(Icons.person_rounded, size: 42, color: primaryColor),
     );
   }
 
-  // ITEM INFORMASI PROFIL
   Widget profileInfoItem({
     required IconData icon,
     required String label,
@@ -967,54 +735,42 @@ class _ProfilePageState extends State<ProfilePage> {
     bool isLast = false,
   }) {
     return Container(
-      margin: EdgeInsets.only(
-        bottom: isLast ? 0 : 12,
-      ),
-      padding: const EdgeInsets.all(13),
+      margin: EdgeInsets.only(bottom: isLast ? 0 : 10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: lightBlue,
-        borderRadius: BorderRadius.circular(14),
+        color: lightBurgundy,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Row(
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
-              color: primaryColor.withOpacity(0.10),
-              borderRadius: BorderRadius.circular(11),
+              color: primaryColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              icon,
-              color: primaryColor,
-              size: 20,
-            ),
+            child: Icon(icon, color: primaryColor, size: 19),
           ),
-
-          const SizedBox(width: 13),
-
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey,
-                  ),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                 ),
-
-                const SizedBox(height: 3),
-
+                const SizedBox(height: 2),
                 Text(
                   value,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w600,
-                    color: Colors.black87,
+                    color: darkBurgundy,
                   ),
                 ),
               ],
@@ -1025,31 +781,24 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // KARTU PROFIL
   Widget profileCard() {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: primaryColor.withOpacity(0.07),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Column(
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(20, 28, 20, 28),
+            padding: const EdgeInsets.fromLTRB(20, 26, 20, 26),
             decoration: const BoxDecoration(
               color: primaryColor,
               borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(24),
-                topRight: Radius.circular(24),
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
               ),
             ),
             child: Column(
@@ -1058,30 +807,26 @@ class _ProfilePageState extends State<ProfilePage> {
                   alignment: Alignment.bottomRight,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(4),
+                      padding: const EdgeInsets.all(3),
                       decoration: const BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
                       ),
                       child: profileImageWidget(),
                     ),
-
                     GestureDetector(
                       onTap: isUploadingPhoto ? null : pickPhoto,
                       child: Container(
-                        width: 34,
-                        height: 34,
+                        width: 32,
+                        height: 32,
                         decoration: BoxDecoration(
                           color: Colors.white,
                           shape: BoxShape.circle,
-                          border: Border.all(
-                            color: primaryColor,
-                            width: 2,
-                          ),
+                          border: Border.all(color: primaryColor, width: 2),
                         ),
                         child: isUploadingPhoto
                             ? const Padding(
-                                padding: EdgeInsets.all(7),
+                                padding: EdgeInsets.all(6),
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
                                   color: primaryColor,
@@ -1089,51 +834,43 @@ class _ProfilePageState extends State<ProfilePage> {
                               )
                             : const Icon(
                                 Icons.camera_alt_rounded,
-                                size: 17,
+                                size: 16,
                                 color: primaryColor,
                               ),
                       ),
                     ),
                   ],
                 ),
-
-                const SizedBox(height: 16),
-
+                const SizedBox(height: 14),
                 Text(
                   name,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 21,
+                    fontSize: 19,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
                 ),
-
-                const SizedBox(height: 5),
-
+                const SizedBox(height: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 5,
+                    horizontal: 10,
+                    vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withOpacity(0.18),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     '@$username',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Colors.white,
-                    ),
+                    style: const TextStyle(fontSize: 12.5, color: Colors.white),
                   ),
                 ),
               ],
             ),
           ),
-
           Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1142,53 +879,45 @@ class _ProfilePageState extends State<ProfilePage> {
                     Icon(
                       Icons.person_outline_rounded,
                       color: primaryColor,
-                      size: 21,
+                      size: 20,
                     ),
-
-                    SizedBox(width: 8),
-
+                    SizedBox(width: 6),
                     Text(
                       'Informasi Pribadi',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
+                        color: darkBurgundy,
                       ),
                     ),
                   ],
                 ),
-
-                const SizedBox(height: 16),
-
+                const SizedBox(height: 14),
                 profileInfoItem(
                   icon: Icons.alternate_email_rounded,
                   label: 'Username',
                   value: username,
                 ),
-
                 profileInfoItem(
                   icon: Icons.email_outlined,
                   label: 'Email',
                   value: email,
                 ),
-
                 profileInfoItem(
                   icon: Icons.phone_outlined,
                   label: 'Nomor HP',
                   value: phone,
                 ),
-
                 profileInfoItem(
                   icon: Icons.wc_outlined,
                   label: 'Jenis Kelamin',
                   value: gender,
                 ),
-
                 profileInfoItem(
                   icon: Icons.location_city_outlined,
                   label: 'Tempat Lahir',
                   value: birthPlace,
                 ),
-
                 profileInfoItem(
                   icon: Icons.calendar_month_outlined,
                   label: 'Tanggal Lahir',
@@ -1203,7 +932,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // KARTU AKSI
   Widget actionCard({
     required IconData icon,
     required String title,
@@ -1211,52 +939,33 @@ class _ProfilePageState extends State<ProfilePage> {
     required VoidCallback onTap,
     bool isLogout = false,
   }) {
-    final color = isLogout ? Colors.red : primaryColor;
-
+    final color = isLogout ? errorColor : primaryColor;
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: color.withOpacity(0.12),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: primaryColor.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(14),
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 14,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             child: Row(
               children: [
                 Container(
-                  width: 48,
-                  height: 48,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(14),
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
-                    icon,
-                    color: color,
-                    size: 22,
-                  ),
+                  child: Icon(icon, color: color, size: 20),
                 ),
-
-                const SizedBox(width: 14),
-
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1264,28 +973,25 @@ class _ProfilePageState extends State<ProfilePage> {
                       Text(
                         title,
                         style: TextStyle(
-                          fontSize: 15,
+                          fontSize: 13.5,
                           fontWeight: FontWeight.bold,
-                          color: isLogout ? Colors.red : Colors.black87,
+                          color: isLogout ? errorColor : darkBurgundy,
                         ),
                       ),
-
                       const SizedBox(height: 2),
-
                       Text(
                         subtitle,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: Colors.grey.shade600,
                         ),
                       ),
                     ],
                   ),
                 ),
-
                 Icon(
                   Icons.arrow_forward_ios_rounded,
-                  size: 15,
+                  size: 14,
                   color: Colors.grey.shade400,
                 ),
               ],
@@ -1307,19 +1013,15 @@ class _ProfilePageState extends State<ProfilePage> {
         title: const Text(
           'Profil',
           style: TextStyle(
-            color: Color.fromARGB(221, 253, 252, 252),
+            color: Colors.white,
             fontWeight: FontWeight.bold,
-            fontSize: 18,
+            fontSize: 16,
           ),
         ),
-        iconTheme: const IconThemeData(color: Color.fromARGB(221, 255, 255, 255)),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: isLoading
-          ? const Center(
-              child: CircularProgressIndicator(
-                color: primaryColor,
-              ),
-            )
+          ? const Center(child: CircularProgressIndicator(color: primaryColor))
           : RefreshIndicator(
               color: primaryColor,
               onRefresh: getProfile,
@@ -1329,24 +1031,20 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Column(
                   children: [
                     profileCard(),
-
-                    const SizedBox(height: 20),
-
+                    const SizedBox(height: 18),
                     actionCard(
                       icon: Icons.edit_outlined,
                       title: 'Edit Profil',
-                      subtitle: 'Ubah informasi data diri akun',
+                      subtitle: 'Ubah informasi data diri',
                       onTap: editProfile,
                     ),
-
                     actionCard(
                       icon: Icons.logout_rounded,
                       title: 'Keluar',
-                      subtitle: 'Keluar dari sesi akun saat ini',
+                      subtitle: 'Keluar dari sesi akun',
                       onTap: logout,
                       isLogout: true,
                     ),
-
                     const SizedBox(height: 10),
                   ],
                 ),
